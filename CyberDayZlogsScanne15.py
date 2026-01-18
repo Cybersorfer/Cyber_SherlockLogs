@@ -6,6 +6,20 @@ import streamlit.components.v1 as components
 # Setup Page Config - Set to "wide" to fit the map and scanner side-by-side
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
+# Custom CSS to make the right column (map) stay in place (floating)
+st.markdown(
+    """
+    <style>
+    [data-testid="column"]:nth-child(2) [data-testid="stVerticalBlock"] {
+        position: fixed;
+        width: 58%;
+        height: 100vh;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 def filter_logs(files, main_choice, target_player=None, sub_choice=None):
     all_lines = []
     # iZurvive specifically looks for this header to recognize the file type
@@ -86,8 +100,10 @@ with col1:
         if st.button("Process Logs"):
             result = filter_logs(uploaded_files, mode, target_player, sub_choice)
             
-            st.success("Filtered! Copy the text below into the map on the right.")
-            st.text_area("Filtered Output (Copy This)", result, height=300)
+            st.success("Filtered!")
+            
+            # Updated Instructions
+            st.warning("Next: Download the file below and upload the new filtered ADM file on the iZurvive map to the right.")
             
             st.download_button(
                 label="💾 Download Filtered File",
@@ -95,10 +111,12 @@ with col1:
                 file_name="FILTERED_LOG.adm",
                 mime="text/plain"
             )
+            
+            st.text_area("Filtered Preview", result, height=300)
 
 with col2:
     st.header("2. iZurvive Map Viewer")
-    st.info("Instructions: Click the 'Filter' icon on the map -> Select 'Serverlogs' -> Paste your filtered text.")
+    st.info("Instructions: Download the file from the left, then click 'Filter' -> 'Serverlogs' on the map below and upload the file.")
     
     # This embeds the iZurvive serverlogs page directly in your app
-    components.iframe("https://www.izurvive.com/serverlogs/", height=800, scrolling=True)
+    components.iframe("https://www.izurvive.com/serverlogs/", height=1000, scrolling=True)
