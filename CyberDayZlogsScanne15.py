@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 # 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. CSS: Forced Dark Mode, Rounded UI, and Button Fixes
+# 2. CSS: Forced Dark Mode, Rounded UI per Screenshot, and Layout Fixes
 st.markdown(
     """
     <style>
@@ -82,8 +82,12 @@ def extract_player_and_coords(line):
 def filter_logs(files, mode, target_player=None, sub_choice=None):
     grouped_report = {} 
     player_positions = {} 
-    all_lines = []
+    raw_filtered_lines = []
+    
+    # Required iZurvive Header
+    header = "AdminLog started on 00:00:00\n******************************************************************************\n"
 
+    all_lines = []
     for uploaded_file in files:
         content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
         all_lines.extend(content.splitlines())
@@ -100,18 +104,15 @@ def filter_logs(files, mode, target_player=None, sub_choice=None):
             player_positions[name] = coords
 
         low = line.lower()
-        
-        # Determine if we should process this line based on mode
         should_process = False
+
         if mode == "Activity per Specific Player" and target_player == name:
             if sub_choice == "Full History": should_process = True
             elif sub_choice == "Movement Only" and "pos=" in low: should_process = True
             elif sub_choice == "Movement + Building":
-                if ("pos=" in low or any(k in low for k in placement_keys)) and "hit" not in low:
-                    should_process = True
+                if ("pos=" in low or any(k in low for k in placement_keys)) and "hit" not in low: should_process = True
             elif sub_choice == "Movement + Raid Watch":
-                if ("pos=" in low or any(k in low for k in raid_keys)) and "built" not in low:
-                    should_process = True
+                if ("pos=" in low or any(k in low for k in raid_keys)) and "built" not in low: should_process = True
         
         elif mode == "Session Tracking (Global)":
             if any(k in low for k in session_keys): should_process = True
@@ -120,6 +121,10 @@ def filter_logs(files, mode, target_player=None, sub_choice=None):
             last_pos = player_positions.get(name)
             link = make_izurvive_link(last_pos)
             
+            # For the Download file, we want all lines with coords. 
+            # For the UI, we only show buttons if the link is valid.
+            raw_filtered_lines.append(line)
+
             if link.startswith("http"):
                 status = "normal"
                 if any(d in low for d in ["died", "killed", "suicide", "bled out"]): status = "death"
@@ -137,7 +142,7 @@ def filter_logs(files, mode, target_player=None, sub_choice=None):
                     grouped_report[name] = []
                 grouped_report[name].append(event_entry)
     
-    return grouped_report
+    return grouped_report, header + "\n".join(raw_filtered_lines)
 
 # --- WEB UI ---
 st.markdown("#### 🛡️ CyberDayZ Scanner")
@@ -157,19 +162,27 @@ with col1:
             temp_all = []
             for f in uploaded_files:
                 temp_all.extend(f.getvalue().decode("utf-8", errors="ignore").splitlines())
-            # Extract player list for dropdown
             player_list = sorted(list(set(line.split('"')[1] for line in temp_all if 'Player "' in line)))
             target_player = st.selectbox("Select Player", player_list)
             sub_choice = st.radio("Detail Level", ["Full History", "Movement Only", "Movement + Building", "Movement + Raid Watch"])
 
         if st.button("🚀 Process"):
-            st.session_state.track_data = filter_logs(uploaded_files, mode, target_player, sub_choice)
+            report, raw_file = filter_logs(uploaded_files, mode, target_player, sub_choice)
+            st.session_state.track_data = report
+            st.session_state.raw_download = raw_file
 
     if "track_data" in st.session_state:
+        # Re-adding the Download Button
+        st.download_button(
+            label="💾 Download Filtered ADM", 
+            data=st.session_state.raw_download, 
+            file_name="CYBER_FILTERED.adm"
+        )
+        
         st.subheader("📍 Player Activity Results")
         for p in sorted(st.session_state.track_data.keys()):
             events = st.session_state.track_data[p]
-            with st.expander(f"👤 {p} ({len(events)} events)"):
+            with st.expander(f"👤 {p} ({len(events)} trackable events)"):
                 for ev in events:
                     st.caption(f"🕒 {ev['time']}")
                     st.markdown(f"<div class='{ev['status']}-log'>{ev['text']}</div>", unsafe_allow_html=True)
