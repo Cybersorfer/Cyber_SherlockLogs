@@ -28,12 +28,13 @@ st.markdown(
 # 3. Helper Functions
 def make_izurvive_link(coords):
     if coords:
-        # DayZ Map coordinates for Chernarus (X and Y)
+        # iZurvive URL format for Chernarus using raw log coordinates
+        # Log pos=<X, Z, Y> maps to iZurvive X;Y
         return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
     return None
 
 def extract_player_and_coords(line):
-    """Safely extracts Player Name and [X, Y] coordinates."""
+    """Safely extracts Player Name and [X, Y] coordinates for mapping."""
     name = "System/Server"
     coords = None
     try:
@@ -44,10 +45,14 @@ def extract_player_and_coords(line):
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
             
-            # DayZ logs use X, Z(Altitude), Y format. 
-            # X = index 0, Y = index 2.
-            # We ignore index 1 because it's the height above sea level.
-            coords = [float(parts[0]), float(parts[2])]
+            # FIXED LOGIC:
+            # DayZ Engine pos = <X, Z, Y>
+            # Based on your example: pos=<10859.5, 2770.4, 6.3>
+            # X = 10859.5 (East/West)
+            # Y = 2770.4 (North/South)
+            # Z = 6.3 (Altitude)
+            # To avoid the water (y=0), we must use the first and second values.
+            coords = [float(parts[0]), float(parts[1])]
     except Exception:
         pass 
     return name, coords
@@ -68,7 +73,6 @@ def filter_logs(files, main_choice):
     for line in all_lines:
         if "|" not in line: continue
         
-        # Memory tracking: capture positions from any line to keep the 'memory' updated
         name, coords = extract_player_and_coords(line)
         if name != "System/Server" and coords:
             player_positions[name] = coords
@@ -82,7 +86,8 @@ def filter_logs(files, main_choice):
                 session_report.append({
                     "text": line.strip(),
                     "link": make_izurvive_link(last_pos),
-                    "player": current_name
+                    "player": current_name,
+                    "coords": last_pos
                 })
                 final_output.append(line)
     
@@ -110,12 +115,14 @@ with col1:
 
     if st.session_state.filtered_result:
         if mode == "Session Tracking (Global)":
-            st.info("💡 Map links generated from last known player positions.")
+            st.info("💡 Map links generated using raw Engine Coordinates (X/Y).")
             for item in st.session_state.session_report:
                 display_name = item.get('player', 'Unknown Player')
                 with st.expander(f"👤 {display_name} - {item['text'][:30]}..."):
                     st.code(item['text'])
                     if item.get('link'):
+                        c = item['coords']
+                        st.write(f"**Raw Coords:** X: {c[0]} | Y: {c[1]}")
                         st.link_button(f"📍 View {display_name} on Map", item['link'])
                     else:
                         st.caption("No coordinates found for this player.")
