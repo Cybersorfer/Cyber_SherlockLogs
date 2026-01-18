@@ -28,39 +28,29 @@ st.markdown(
 # 3. Helper Functions
 def make_izurvive_link(coords):
     if coords:
-        # iZurvive URL format for Chernarus using raw log coordinates
-        # Log pos=<X, Z, Y> maps to iZurvive X;Y
+        # X and Y raw engine coordinates
         return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
     return None
 
 def extract_player_and_coords(line):
-    """Safely extracts Player Name and [X, Y] coordinates for mapping."""
     name = "System/Server"
     coords = None
     try:
         if 'Player "' in line:
             name = line.split('Player "')[1].split('"')[0]
-        
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
-            
-            # FIXED LOGIC:
-            # DayZ Engine pos = <X, Z, Y>
-            # Based on your example: pos=<10859.5, 2770.4, 6.3>
-            # X = 10859.5 (East/West)
-            # Y = 2770.4 (North/South)
-            # Z = 6.3 (Altitude)
-            # To avoid the water (y=0), we must use the first and second values.
+            # Corrected Indexing: X=0, Y=1
             coords = [float(parts[0]), float(parts[1])]
-    except Exception:
+    except:
         pass 
     return name, coords
 
-# 4. Filter Logic
+# 4. Filter Logic with Grouping
 def filter_logs(files, main_choice):
     final_output = []
-    session_report = []
+    grouped_report = {} # { "PlayerName": [ {event_data}, ... ] }
     player_positions = {} 
 
     all_lines = []
@@ -68,7 +58,7 @@ def filter_logs(files, main_choice):
         content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
         all_lines.extend(content.splitlines())
 
-    session_keys = ["is connected", "has been disconnected", "is connecting", "connected"]
+    session_keys = ["is connected", "has been disconnected", "is connecting", "connected", "died", "killed"]
 
     for line in all_lines:
         if "|" not in line: continue
@@ -83,19 +73,23 @@ def filter_logs(files, main_choice):
                 current_name, _ = extract_player_and_coords(line)
                 last_pos = player_positions.get(current_name)
                 
-                session_report.append({
+                event_entry = {
+                    "time": line.split(" | ")[0] if " | " in line else "00:00:00",
                     "text": line.strip(),
                     "link": make_izurvive_link(last_pos),
-                    "player": current_name,
                     "coords": last_pos
-                })
+                }
+                
+                if current_name not in grouped_report:
+                    grouped_report[current_name] = []
+                grouped_report[current_name].append(event_entry)
                 final_output.append(line)
     
-    return "\n".join(final_output), session_report
+    return "\n".join(final_output), grouped_report
 
 # --- WEB UI ---
 if "filtered_result" not in st.session_state: st.session_state.filtered_result = None
-if "session_report" not in st.session_state: st.session_state.session_report = []
+if "grouped_report" not in st.session_state: st.session_state.grouped_report = {}
 if "map_version" not in st.session_state: st.session_state.map_version = 0
 
 st.markdown("#### 🛡️ CyberDayZ Scanner")
@@ -111,21 +105,24 @@ with col1:
         if st.button("🚀 Process"):
             res, report = filter_logs(uploaded_files, mode)
             st.session_state.filtered_result = res
-            st.session_state.session_report = report
+            st.session_state.grouped_report = report
 
     if st.session_state.filtered_result:
         if mode == "Session Tracking (Global)":
-            st.info("💡 Map links generated using raw Engine Coordinates (X/Y).")
-            for item in st.session_state.session_report:
-                display_name = item.get('player', 'Unknown Player')
-                with st.expander(f"👤 {display_name} - {item['text'][:30]}..."):
-                    st.code(item['text'])
-                    if item.get('link'):
-                        c = item['coords']
-                        st.write(f"**Raw Coords:** X: {c[0]} | Y: {c[1]}")
-                        st.link_button(f"📍 View {display_name} on Map", item['link'])
-                    else:
-                        st.caption("No coordinates found for this player.")
+            st.info(f"📊 Tracking {len(st.session_state.grouped_report)} Players")
+            
+            # Sort players alphabetically for fast reading
+            sorted_players = sorted(st.session_state.grouped_report.keys())
+            
+            for player in sorted_players:
+                events = st.session_state.grouped_report[player]
+                with st.expander(f"👤 {player} ({len(events)} events)"):
+                    for ev in events:
+                        st.caption(f"🕒 {ev['time']}")
+                        st.code(ev['text'])
+                        if ev['link']:
+                            st.link_button(f"📍 View Location", ev['link'], key=f"btn_{player}_{ev['time']}")
+                        st.divider()
         else:
             st.download_button("💾 Download for iZurvive", st.session_state.filtered_result, "MAP_READY.adm")
 
