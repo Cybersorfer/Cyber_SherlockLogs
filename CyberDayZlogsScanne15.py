@@ -1,106 +1,64 @@
 import streamlit as st
 import io
-import streamlit.components.v1 as components
 
-# 1. Setup Page Config
-st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
-
-# 2. Ultra-Tight CSS: Forces everything to the absolute top
-st.markdown(
-    """
-    <style>
-    #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
-    
-    .block-container {
-        padding-top: 0rem !important;
-        padding-bottom: 0rem !important;
-        max-width: 100%;
-    }
-
-    /* Pull logo higher to avoid overlap */
-    [data-testid="stMarkdownContainer"] h4 {
-        margin-top: -25px !important;
-        margin-bottom: 5px !important;
-    }
-
-    @media (min-width: 768px) {
-        .main { overflow: hidden; }
-        [data-testid="stHorizontalBlock"] {
-            height: 98vh;
-            margin-top: -25px; 
-        }
-        [data-testid="column"] {
-            height: 100% !important;
-            overflow-y: auto !important;
-            padding-top: 10px;
-            border: 1px solid #31333F;
-            border-radius: 8px;
-        }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-# 3. Location Data (Fixing the ValueError)
-# Ensure every town listed in your selectbox exists here exactly
+# --- VERIFIED CHERNARUS GEODATA ---
+# Format: "Location Name": (X_coord, Z_coord, Radius_in_meters)
 CHERNARUS_LOCATIONS = {
-    "NW Airfield (NWAF)": ([12134, 12634], 1500),
-    "VMC": ([12134, 12634], 500),
-    "Tisy": ([12134, 12634], 1000)
+    "NW Airfield (NWAF)": (13470, 13075, 1000),
+    "Severograd (Североград)": (11000, 12400, 800),
+    "Zelenogorsk (Зеленогорск)": (2700, 5200, 800),
+    "Stary Sobor (Старый Собор)": (6100, 7600, 500),
+    "Novy Sobor (Новый Собор)": (7000, 7600, 400),
+    "Gorka (Горка)": (9500, 6500, 500),
+    "Vybor (Выбор)": (3800, 8900, 400),
+    "Radio Zenit / Altar": (4200, 8600, 400),
+    "Krasnostav (Красностав)": (11100, 13000, 600),
+    "Tisy Military Base": (11500, 14200, 800),
+    "Rify Shipwreck": (13400, 9200, 500),
+    "Prison Island": (2100, 1300, 600),
+    "Berezino (Березино)": (12900, 9200, 1000),
+    "Chernogorsk (Черногорск)": (6700, 2500, 1200),
+    "Elektrozavodsk (Электрозаводск)": (10300, 2300, 1000),
 }
 
-if "filtered_result" not in st.session_state:
-    st.session_state.filtered_result = None
-if "map_version" not in st.session_state:
-    st.session_state.map_version = 0
+def is_in_requested_area(line, target_coords, radius):
+    """Parses pos=<X, Z, Y> and compares to geodata."""
+    try:
+        if "pos=<" not in line: return False
+        coord_part = line.split("pos=<")[1].split(">")[0]
+        x, z = map(float, coord_part.split(",")[:2])
+        # Simple distance check for fast processing
+        return abs(x - target_coords[0]) <= radius and abs(z - target_coords[1]) <= radius
+    except:
+        return False
 
-def filter_logs(files, main_choice, target_player=None, sub_choice=None):
-    all_lines = []
-    header = "******************************************************************************\n"
-    header += "AdminLog started on Web_Filter_Session\n"
-    for uploaded_file in files:
-        stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8", errors="ignore"))
-        for line in stringio:
-            if "|" in line and ":" in line:
-                all_lines.append(line)
-    return header + "".join(all_lines)
+# --- WEB UI FOR LOCATION FILTERING ---
+st.subheader("📍 Location-Based Activity Filter")
+selected_area = st.selectbox("Select Location to Analyze", sorted(CHERNARUS_LOCATIONS.keys()))
 
-# --- WEB UI ---
-st.markdown("#### 🛡️ CyberDayZ Scanner")
-
-col1, col2 = st.columns([1, 2.5])
-
-with col1:
-    st.write("") # Spacer to prevent overlap
-    st.write("**1. Filter Logs**")
-    uploaded_files = st.file_uploader("Upload .ADM", type=['adm', 'rpt'], accept_multiple_files=True)
-
-    # TOWN EXTRACTION TOOL (The part that caused the error)
-    st.write("**Town Search Tool**")
-    town = st.selectbox("Select Map Area", list(CHERNARUS_LOCATIONS.keys()))
-    
-    # FIX: Check if town exists before accessing to prevent ValueError
-    if town in CHERNARUS_LOCATIONS:
-        coords, radius = CHERNARUS_LOCATIONS[town]
-        st.caption(f"Searching area: {town}")
-
-    if st.button("🚀 Process"):
-        st.session_state.filtered_result = filter_logs(uploaded_files, "Global")
-
-    if st.session_state.filtered_result:
-        st.download_button(label="💾 Download ADM", data=st.session_state.filtered_result, file_name="FOR_MAP.adm")
-
-with col2:
-    c1, c2 = st.columns([3, 1])
-    with c1: 
-        st.write("") 
-        st.write("**2. iZurvive Map**")
-    with c2: 
-        if st.button("🔄 Refresh"):
-            st.session_state.map_version += 1
-    
-    map_url = f"https://www.izurvive.com/serverlogs/?v={st.session_state.map_version}"
-    components.iframe(map_url, height=1100, scrolling=True)
+if st.button(f"Extract Activity for {selected_area}"):
+    if 'all_lines' in locals() or 'all_lines' in st.session_state:
+        target_coords, radius = CHERNARUS_LOCATIONS[selected_area]
+        
+        # Filter lines based on geofence
+        area_activity = [l for l in all_lines if is_in_requested_area(l, target_coords, radius)]
+        
+        if area_activity:
+            # Identify players who were in the area
+            found_players = set(l.split('"')[1] for l in area_activity if 'Player "' in l)
+            st.success(f"Found {len(area_activity)} events involving: {', '.join(found_players)}")
+            
+            # Prepare for download
+            header = "******************************************************************************\n"
+            header += f"AdminLog - Activity Filtered for: {selected_area}\n"
+            final_file = header + "".join(area_activity)
+            
+            st.download_button(
+                label=f"📥 Download {selected_area} Log",
+                data=final_file,
+                file_name=f"ACTIVITY_{selected_area.replace(' ', '_')}.adm",
+                mime="text/plain"
+            )
+            st.text_area("Area Preview", final_file[:2000], height=300)
+        else:
+            st.warning(f"No player activity recorded in {selected_area} for these logs.")
