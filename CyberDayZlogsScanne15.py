@@ -5,14 +5,15 @@ import streamlit.components.v1 as components
 # 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. Advanced CSS: Move content UP, independent scroll (Desktop), and scrollable (Mobile)
+# 2. Advanced CSS: Move content to the TOP, hide header, and fix mobile scrolling
 st.markdown(
     """
     <style>
-    /* Move the whole website up by reducing top padding */
+    /* Hide the Streamlit Header and Padding at the top */
+    header {visibility: hidden;}
     .main .block-container {
         max-width: 100%;
-        padding-top: 1rem !important; /* Reduced from 2rem or 5rem */
+        padding-top: 0rem !important;
         padding-bottom: 0rem;
         height: 100vh;
     }
@@ -23,7 +24,7 @@ st.markdown(
             overflow: hidden; /* Prevent global scroll on desktop */
         }
         [data-testid="stHorizontalBlock"] {
-            height: 92vh; /* Use more height since we moved up */
+            height: 98vh; /* Maximize height usage */
         }
         [data-testid="column"] {
             height: 100% !important;
@@ -34,26 +35,33 @@ st.markdown(
         }
     }
 
-    /* MOBILE VIEW: Standard Scrolling */
+    /* MOBILE VIEW: Ensure scrollbars are visible */
     @media (max-width: 767px) {
         .main .block-container {
-            overflow: auto !important; /* Allow mobile to scroll everything */
+            overflow: auto !important; 
             height: auto !important;
         }
         [data-testid="column"] {
-            height: auto !important;
-            overflow: visible !important;
-            margin-bottom: 20px;
+            height: 500px !important; /* Set a fixed height on mobile so they scroll individually */
+            overflow-y: scroll !important;
+            border: 1px solid #31333F;
+            margin-bottom: 10px;
+            -webkit-overflow-scrolling: touch;
         }
     }
 
-    /* Custom Scrollbar Styling */
+    /* Global Scrollbar Styling */
     ::-webkit-scrollbar {
-        width: 8px;
+        width: 10px;
+        height: 10px;
+    }
+    ::-webkit-scrollbar-track {
+        background: #0e1117;
     }
     ::-webkit-scrollbar-thumb {
         background-color: #4b4b4b;
         border-radius: 10px;
+        border: 2px solid #0e1117;
     }
     </style>
     """,
@@ -108,13 +116,14 @@ def filter_logs(files, main_choice, target_player=None, sub_choice=None):
     return header + "".join(final_output)
 
 # --- WEB UI ---
-st.title("🛡️ CyberDayZ Log Scanner")
+# Displaying title smaller to save space
+st.markdown("### 🛡️ CyberDayZ Log Scanner")
 
 # Column ratio updated for width
 col1, col2 = st.columns([1, 2.5])
 
 with col1:
-    st.subheader("1. Filter Logs")
+    st.write("##### 1. Filter Logs")
     uploaded_files = st.file_uploader("Upload .ADM Files", type=['adm', 'rpt'], accept_multiple_files=True)
 
     if uploaded_files:
@@ -139,23 +148,24 @@ with col1:
 
         if st.button("🚀 Process Logs"):
             st.session_state.filtered_result = filter_logs(uploaded_files, mode, target_player, sub_choice)
-            st.success("Ready!")
 
     if st.session_state.filtered_result:
         st.download_button(
-            label="💾 Download for iZurvive", 
+            label="💾 Download Filtered ADM", 
             data=st.session_state.filtered_result, 
-            file_name="FOR_MAP.adm",
+            file_name="FILTERED_LOGS.adm",
             mime="text/plain"
         )
 
 # RIGHT COLUMN: iZurvive Map
 with col2:
-    st.subheader("2. iZurvive Map Viewer")
-    
-    if st.button("🔄 Refresh Map"):
-        st.session_state.map_version += 1
+    col_map_h, col_map_b = st.columns([2, 1])
+    with col_map_h:
+        st.write("##### 2. iZurvive Map Viewer")
+    with col_map_b:
+        if st.button("🔄 Refresh Map"):
+            st.session_state.map_version += 1
     
     # Dynamic URL query to force refresh
     map_url = f"https://www.izurvive.com/serverlogs/?v={st.session_state.map_version}"
-    components.iframe(map_url, height=1000, scrolling=True)
+    components.iframe(map_url, height=1200, scrolling=True)
