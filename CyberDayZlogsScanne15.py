@@ -28,7 +28,7 @@ st.markdown(
 # 3. Helper Functions
 def make_izurvive_link(coords):
     if coords:
-        # DayZ Map coordinates for Chernarus
+        # DayZ Map coordinates for Chernarus (X and Y)
         return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
     return None
 
@@ -43,7 +43,10 @@ def extract_player_and_coords(line):
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
-            # DayZ logs use X, Altitude, Y format
+            
+            # DayZ logs use X, Z(Altitude), Y format. 
+            # X = index 0, Y = index 2.
+            # We ignore index 1 because it's the height above sea level.
             coords = [float(parts[0]), float(parts[2])]
     except Exception:
         pass 
@@ -65,7 +68,7 @@ def filter_logs(files, main_choice):
     for line in all_lines:
         if "|" not in line: continue
         
-        # Capture positions from any line to keep the 'memory' updated
+        # Memory tracking: capture positions from any line to keep the 'memory' updated
         name, coords = extract_player_and_coords(line)
         if name != "System/Server" and coords:
             player_positions[name] = coords
@@ -73,7 +76,6 @@ def filter_logs(files, main_choice):
         if main_choice == "Session Tracking (Global)":
             low = line.lower()
             if any(k in low for k in session_keys):
-                # Use the helper to get name for this specific line
                 current_name, _ = extract_player_and_coords(line)
                 last_pos = player_positions.get(current_name)
                 
@@ -110,7 +112,6 @@ with col1:
         if mode == "Session Tracking (Global)":
             st.info("💡 Map links generated from last known player positions.")
             for item in st.session_state.session_report:
-                # Fixed: Now uses a default name if 'player' key is missing or failed
                 display_name = item.get('player', 'Unknown Player')
                 with st.expander(f"👤 {display_name} - {item['text'][:30]}..."):
                     st.code(item['text'])
