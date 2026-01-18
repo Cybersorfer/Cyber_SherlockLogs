@@ -25,59 +25,64 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 3. Helper: Generate iZurvive Link from DayZ Coords
-def make_izurvive_link(line):
+# 3. Helper Functions
+def make_izurvive_link(coords):
+    if coords:
+        # iZurvive URL format: location=X;Y
+        return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
+    return None
+
+def extract_player_and_coords(line):
+    """Extracts Player Name and [X, Y] coordinates from a line if available."""
     try:
+        name = line.split('Player "')[1].split('"')[0]
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
-            x, y = parts[0], parts[2]
-            # iZurvive URL format for Chernarus coordinates
-            return f"https://www.izurvive.com/chernarusplus/#location={x};{y}"
+            return name, [float(parts[0]), float(parts[2])]
+        return name, None
     except:
-        return None
-    return None
+        return None, None
 
-def extract_coords(line):
-    try:
-        if "pos=<" in line:
-            raw = line.split("pos=<")[1].split(">")[0]
-            parts = [float(p.strip()) for p in raw.split(",")]
-            return [parts[0], parts[2]]
-    except:
-        return None
-    return None
-
-# 4. Main Filter Logic
-def filter_logs(files, main_choice, target_player=None, sub_choice=None, town_choice=None, radius=1000):
+# 4. Fixed Session Logic
+def filter_logs(files, main_choice):
     final_output = []
-    session_data = [] # Used for the live UI report
-    
+    session_report = []
+    player_positions = {} # Stores { "PlayerName": [X, Y] }
+
     all_lines = []
     for uploaded_file in files:
-        stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8", errors="ignore"))
-        all_lines.extend(stringio.readlines())
+        content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
+        all_lines.extend(content.splitlines())
 
-    session_keys = ["connected", "disconnected", "lost connection", "choosing to respawn"]
+    session_keys = ["is connected", "has been disconnected", "is connecting"]
 
     for line in all_lines:
-        if "|" not in line or ":" not in line:
-            continue
+        if "|" not in line: continue
         
-        low = line.lower()
+        # 1. Update player positions from ANY line that has them (PlayerList, Building, etc.)
+        name, coords = extract_player_and_coords(line)
+        if name and coords:
+            player_positions[name] = coords
 
+        # 2. If it's a Session event, grab the last known position for that player
         if main_choice == "Session Tracking (Global)":
+            low = line.lower()
             if any(k in low for k in session_keys):
-                link = make_izurvive_link(line)
-                session_data.append({"text": line.strip(), "link": link})
+                # Try to find name even if no pos in this specific line
+                event_name = line.split('Player "')[1].split('"')[0] if 'Player "' in line else "Unknown"
+                last_pos = player_positions.get(event_name)
+                
+                link = make_izurvive_link(last_pos)
+                session_report.append({
+                    "text": line.strip(),
+                    "link": link,
+                    "coords": last_pos,
+                    "player": event_name
+                })
                 final_output.append(line)
-        
-        # ... Other filter modes remain the same ...
-        elif main_choice == "All Death Locations":
-            if any(x in low for x in ["killed", "died", "suicide"]): final_output.append(line)
-        # (Simplified for brevity, keep your existing town/player logic here)
-
-    return "".join(final_output), session_data
+    
+    return "\n".join(final_output), session_report
 
 # --- WEB UI ---
 if "filtered_result" not in st.session_state: st.session_state.filtered_result = None
@@ -92,28 +97,25 @@ with col1:
     uploaded_files = st.file_uploader("Upload .ADM", type=['adm', 'rpt'], accept_multiple_files=True)
 
     if uploaded_files:
-        mode = st.selectbox("Select Filter", ["Session Tracking (Global)", "All Death Locations", "Activity Near Specific Town"])
+        mode = st.selectbox("Select Filter", ["Session Tracking (Global)", "Everything with Coordinates"])
 
         if st.button("🚀 Process"):
             res, report = filter_logs(uploaded_files, mode)
             st.session_state.filtered_result = res
             st.session_state.session_report = report
 
-    # SESSION TRACKING REPORT VIEW
-    if st.session_state.filtered_result and mode == "Session Tracking (Global)":
-        st.success(f"Tracked {len(st.session_state.session_report)} Session Events")
-        
-        for item in st.session_state.session_report:
-            with st.expander(item['text'][:60] + "..."):
-                st.write(f"**Full Log:** `{item['text']}`")
-                if item['link']:
-                    st.link_button("📍 View on iZurvive Map", item['link'])
-                else:
-                    st.caption("No coordinates found for this event.")
-    
-    # Standard Download for other modes
-    elif st.session_state.filtered_result:
-        st.download_button("💾 Download for iZurvive", st.session_state.filtered_result, "MAP_READY.adm")
+    if st.session_state.filtered_result:
+        if mode == "Session Tracking (Global)":
+            st.info("💡 Individual events below have map links based on last known positions.")
+            for item in st.session_state.session_report:
+                with st.expander(f"👤 {item['player']} - {item['text'][:30]}..."):
+                    st.code(item['text'])
+                    if item['link']:
+                        st.link_button(f"📍 View {item['player']} on Map", item['link'])
+                    else:
+                        st.caption("No coordinates found for this player in this file.")
+        else:
+            st.download_button("💾 Download for iZurvive", st.session_state.filtered_result, "MAP_READY.adm")
 
 with col2:
     c1, c2 = st.columns([3, 1])
