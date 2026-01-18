@@ -4,18 +4,18 @@ import math
 import hashlib
 import streamlit.components.v1 as components
 
-# 1. Setup Page Config & Force Dark Mode
+# 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. Comprehensive CSS: Matches your Screenshot and fixes Dark Mode
+# 2. CSS: Hard Dark Mode & Rounded UI
 st.markdown(
     """
     <style>
-    /* Force Dark Theme */
+    /* Hard Dark Theme */
     .stApp { background-color: #0e1117; color: #fafafa; }
     #MainMenu, header, footer { visibility: hidden; }
 
-    /* Matches Screenshot: Rounded, centered upload box */
+    /* Rounded Upload Box */
     [data-testid="stFileUploader"] {
         background-color: #161b22;
         border: 1px solid #31333F;
@@ -23,7 +23,7 @@ st.markdown(
         padding: 20px;
     }
     
-    /* Button Visibility & Styling */
+    /* Dark Mode Buttons */
     div.stButton > button, div.stLinkButton > a {
         background-color: #262730 !important;
         color: #ffffff !important;
@@ -35,7 +35,7 @@ st.markdown(
         color: #ff4b4b !important;
     }
 
-    /* Event Type Colors */
+    /* Status Colors */
     .death-log { color: #ff4b4b; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; }
     .connect-log { color: #28a745; border-left: 3px solid #28a745; padding-left: 10px; }
     .disconnect-log { color: #ffc107; border-left: 3px solid #ffc107; padding-left: 10px; }
@@ -61,7 +61,7 @@ st.markdown(
 def make_izurvive_link(coords):
     if coords and isinstance(coords, list) and len(coords) >= 2:
         return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
-    return ""
+    return None
 
 def extract_player_and_coords(line):
     name = "System/Server"
@@ -72,15 +72,15 @@ def extract_player_and_coords(line):
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
+            # X=0, Y=1 (Engine coordinates)
             coords = [float(parts[0]), float(parts[1])]
     except:
         pass 
     return str(name), coords
 
-# 4. Filter Logic with Dual-Group Tracking
+# 4. Filter Logic: DISCARD events without coordinates
 def filter_logs(files, mode):
-    trackable_players = {}   # Group 1: Has Coordinates
-    untrackable_events = {}  # Group 2: No Coordinates
+    grouped_report = {} 
     player_positions = {} 
 
     all_lines = []
@@ -88,7 +88,7 @@ def filter_logs(files, mode):
         content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
         all_lines.extend(content.splitlines())
 
-    session_keys = ["is connected", "has been disconnected", "is connecting", "connected", "died", "killed", "bled out"]
+    session_keys = ["is connected", "has been disconnected", "is connecting", "connected", "died", "killed", "bled out", "suicide"]
 
     for line in all_lines:
         if "|" not in line: continue
@@ -104,25 +104,25 @@ def filter_logs(files, mode):
                 last_pos = player_positions.get(current_name)
                 link = make_izurvive_link(last_pos)
                 
-                status = "normal"
-                if any(d in low for d in ["died", "killed", "bled out"]): status = "death"
-                elif "connected" in low: status = "connect"
-                elif "disconnected" in low: status = "disconnect"
+                # CRITICAL FIX: Only proceed if a link can be generated
+                if link:
+                    status = "normal"
+                    if any(d in low for d in ["died", "killed", "suicide", "bled out"]): status = "death"
+                    elif "connected" in low or "connecting" in low: status = "connect"
+                    elif "disconnected" in low: status = "disconnect"
 
-                event_entry = {
-                    "time": str(line.split(" | ")[0]),
-                    "text": str(line.strip()),
-                    "link": link,
-                    "status": status
-                }
+                    event_entry = {
+                        "time": str(line.split(" | ")[0]),
+                        "text": str(line.strip()),
+                        "link": link,
+                        "status": status
+                    }
 
-                # LOGIC: Sort into appropriate group
-                target_dict = trackable_players if link else untrackable_events
-                if current_name not in target_dict:
-                    target_dict[current_name] = []
-                target_dict[current_name].append(event_entry)
+                    if current_name not in grouped_report:
+                        grouped_report[current_name] = []
+                    grouped_report[current_name].append(event_entry)
     
-    return trackable_players, untrackable_events
+    return grouped_report
 
 # --- WEB UI ---
 st.markdown("#### 🛡️ CyberDayZ Scanner")
@@ -135,34 +135,25 @@ with col1:
     if uploaded_files:
         mode = st.selectbox("Select Filter", ["Session Tracking (Global)", "All Map Positions"])
         if st.button("🚀 Process"):
-            st.session_state.group1, st.session_state.group2 = filter_logs(uploaded_files, mode)
+            st.session_state.track_data = filter_logs(uploaded_files, mode)
 
-    if "group1" in st.session_state:
-        # SEARCH BAR
+    if "track_data" in st.session_state:
         query = st.text_input("🔍 Search Player", "").lower()
-
-        # TAB 1: Trackable
-        st.subheader("📍 Trackable Players")
-        for p in sorted(st.session_state.group1.keys()):
+        st.subheader("📍 Trackable Session Events")
+        
+        sorted_players = sorted(st.session_state.track_data.keys())
+        for p in sorted_players:
             if query and query not in p.lower(): continue
-            with st.expander(f"👤 {p}"):
-                for i, ev in enumerate(st.session_state.group1[p]):
+            
+            events = st.session_state.track_data[p]
+            with st.expander(f"👤 {p} ({len(events)} events)"):
+                for i, ev in enumerate(events):
                     st.caption(f"🕒 {ev['time']}")
                     st.markdown(f"<div class='{ev['status']}-log'>{ev['text']}</div>", unsafe_allow_html=True)
-                    # SAFE LINK CHECK
-                    if ev['link'].startswith("http"):
-                        safe_key = hashlib.md5(f"{p}{i}{ev['time']}".encode()).hexdigest()
-                        st.link_button("📍 View on Map", ev['link'], key=f"btn_{safe_key}")
-                    st.divider()
-
-        # TAB 2: Untrackable
-        st.subheader("❓ Events Without Position")
-        for p in sorted(st.session_state.group2.keys()):
-            if query and query not in p.lower(): continue
-            with st.expander(f"👤 {p}"):
-                for ev in st.session_state.group2[p]:
-                    st.caption(f"🕒 {ev['time']}")
-                    st.code(ev['text'])
+                    
+                    # Safe button creation
+                    safe_key = hashlib.md5(f"{p}{i}{ev['time']}".encode()).hexdigest()
+                    st.link_button("📍 View on Map", ev['link'], key=f"btn_{safe_key}")
                     st.divider()
 
 with col2:
