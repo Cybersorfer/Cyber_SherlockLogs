@@ -5,45 +5,53 @@ import streamlit.components.v1 as components
 # 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. Advanced CSS for Independent Scrolling and Layout Tuning
+# 2. Advanced CSS: Move content UP, independent scroll (Desktop), and scrollable (Mobile)
 st.markdown(
     """
     <style>
-    /* Force the main container to fill the screen and disable global scroll */
+    /* Move the whole website up by reducing top padding */
     .main .block-container {
         max-width: 100%;
-        padding-top: 2rem;
+        padding-top: 1rem !important; /* Reduced from 2rem or 5rem */
         padding-bottom: 0rem;
         height: 100vh;
-        overflow: hidden;
     }
 
-    /* Target the column container */
-    [data-testid="stHorizontalBlock"] {
-        height: 90vh;
+    /* DESKTOP VIEW: Independent Columns */
+    @media (min-width: 768px) {
+        .main .block-container {
+            overflow: hidden; /* Prevent global scroll on desktop */
+        }
+        [data-testid="stHorizontalBlock"] {
+            height: 92vh; /* Use more height since we moved up */
+        }
+        [data-testid="column"] {
+            height: 100% !important;
+            overflow-y: auto !important;
+            padding-right: 10px;
+            border: 1px solid #31333F;
+            border-radius: 8px;
+        }
     }
 
-    /* Independent scrollable boxes for each column */
-    [data-testid="column"] {
-        height: 100% !important;
-        overflow-y: auto !important;
-        padding-right: 15px;
-        border: 1px solid #31333F;
-        border-radius: 8px;
-        padding: 10px;
+    /* MOBILE VIEW: Standard Scrolling */
+    @media (max-width: 767px) {
+        .main .block-container {
+            overflow: auto !important; /* Allow mobile to scroll everything */
+            height: auto !important;
+        }
+        [data-testid="column"] {
+            height: auto !important;
+            overflow: visible !important;
+            margin-bottom: 20px;
+        }
     }
 
-    /* Set the specific width for the right column to be much wider */
-    [data-testid="column"]:nth-child(2) {
-        flex: 2.5 1 0% !important;
-        width: 70% !important;
+    /* Custom Scrollbar Styling */
+    ::-webkit-scrollbar {
+        width: 8px;
     }
-
-    /* Style scrollbars */
-    [data-testid="column"]::-webkit-scrollbar {
-        width: 6px;
-    }
-    [data-testid="column"]::-webkit-scrollbar-thumb {
+    ::-webkit-scrollbar-thumb {
         background-color: #4b4b4b;
         border-radius: 10px;
     }
@@ -102,16 +110,15 @@ def filter_logs(files, main_choice, target_player=None, sub_choice=None):
 # --- WEB UI ---
 st.title("🛡️ CyberDayZ Log Scanner")
 
-# Column ratio set to make the map viewer much wider [1, 2.5]
+# Column ratio updated for width
 col1, col2 = st.columns([1, 2.5])
 
-# LEFT COLUMN: Filter Logic
 with col1:
     st.subheader("1. Filter Logs")
     uploaded_files = st.file_uploader("Upload .ADM Files", type=['adm', 'rpt'], accept_multiple_files=True)
 
     if uploaded_files:
-        mode = st.selectbox("Select Filter", [
+        mode = st.selectbox("Filter", [
             "Activity per Specific Player", 
             "All Death Locations", 
             "All Placements", 
@@ -127,30 +134,28 @@ with col1:
             for f in uploaded_files:
                 temp_all.extend(f.getvalue().decode("utf-8", errors="ignore").splitlines())
             player_list = sorted(list(set(line.split('"')[1] for line in temp_all if 'Player "' in line)))
-            target_player = st.selectbox("Select Player", player_list)
-            sub_choice = st.radio("Detail Level", ["Full History", "Movement Only", "Movement + Building", "Movement + Raid Watch"])
+            target_player = st.selectbox("Player", player_list)
+            sub_choice = st.radio("Detail", ["Full History", "Movement Only", "Movement + Building", "Movement + Raid Watch"])
 
         if st.button("🚀 Process Logs"):
             st.session_state.filtered_result = filter_logs(uploaded_files, mode, target_player, sub_choice)
-            st.success("Filtered! Ready to download.")
+            st.success("Ready!")
 
     if st.session_state.filtered_result:
-        # Download button remains so you can get the file for iZurvive
         st.download_button(
             label="💾 Download for iZurvive", 
             data=st.session_state.filtered_result, 
             file_name="FOR_MAP.adm",
             mime="text/plain"
         )
-        st.info("Download the file above and upload it to the iZurvive map on the right.")
 
 # RIGHT COLUMN: iZurvive Map
 with col2:
     st.subheader("2. iZurvive Map Viewer")
     
-    if st.button("🔄 Refresh Map Window"):
+    if st.button("🔄 Refresh Map"):
         st.session_state.map_version += 1
     
     # Dynamic URL query to force refresh
     map_url = f"https://www.izurvive.com/serverlogs/?v={st.session_state.map_version}"
-    components.iframe(map_url, height=1200, scrolling=True)
+    components.iframe(map_url, height=1000, scrolling=True)
