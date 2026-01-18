@@ -11,37 +11,37 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. Comprehensive CSS: Forced Dark Mode & Layout Fixes
+# 2. Comprehensive CSS: Dark Mode, Button Colors, and Layout
 st.markdown(
     """
     <style>
-    /* Force Dark Theme Colors */
-    :root {
-        --primary-color: #ff4b4b;
-        --background-color: #0e1117;
-        --secondary-background-color: #262730;
-        --text-color: #fafafa;
+    /* Force Dark Theme */
+    .stApp {
+        background-color: #0e1117;
+        color: #fafafa;
     }
     
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
-    
-    /* Dark Mode specific overrides */
-    .stApp {
-        background-color: #0e1117;
-        color: #fafafa;
+
+    /* Fix Button Visibility in Dark Mode */
+    div.stButton > button, div.stLinkButton > a {
+        background-color: #262730 !important;
+        color: #ffffff !important;
+        border: 1px solid #4b4b4b !important;
+    }
+    div.stButton > button:hover, div.stLinkButton > a:hover {
+        border-color: #ff4b4b !important;
+        color: #ff4b4b !important;
     }
 
     .block-container { padding-top: 0rem !important; padding-bottom: 0rem !important; max-width: 100%; }
     
-    .death-log {
-        color: #ff4b4b;
-        font-weight: bold;
-        border-left: 3px solid #ff4b4b;
-        padding-left: 10px;
-        margin: 5px 0;
-    }
+    /* Event Colors */
+    .death-log { color: #ff4b4b; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; }
+    .connect-log { color: #28a745; border-left: 3px solid #28a745; padding-left: 10px; }
+    .disconnect-log { color: #ffc107; border-left: 3px solid #ffc107; padding-left: 10px; }
 
     [data-testid='stMarkdownContainer'] h4 { margin-top: -15px !important; margin-bottom: 10px !important; }
     
@@ -65,22 +65,19 @@ st.markdown(
 # 3. Helper Functions
 def make_izurvive_link(coords):
     if coords and isinstance(coords, list) and len(coords) >= 2:
-        # Return link only if coordinates are valid numbers
         return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
-    return None
+    return ""
 
 def extract_player_and_coords(line):
     name = "System/Server"
     coords = None
     try:
         if 'Player "' in line:
-            # Extract name correctly even if ID follows immediately
             name = line.split('Player "')[1].split('"')[0]
-        
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
-            # X=0, Y=1 logic for inland positioning
+            # X=0, Y=1 (Correct Engine Coords)
             coords = [float(parts[0]), float(parts[1])]
     except:
         pass 
@@ -112,13 +109,17 @@ def filter_logs(files, main_choice):
                 current_name, _ = extract_player_and_coords(line)
                 last_pos = player_positions.get(current_name)
                 
-                is_death = any(d in low for d in ["died", "killed", "suicide", "bled out"])
+                # Tagging event type for colors
+                status = "normal"
+                if any(d in low for d in ["died", "killed", "suicide", "bled out"]): status = "death"
+                elif "is connected" in low or "is connecting" in low: status = "connect"
+                elif "disconnected" in low: status = "disconnect"
                 
                 event_entry = {
                     "time": str(line.split(" | ")[0]) if " | " in line else "00:00:00",
                     "text": str(line.strip()),
                     "link": make_izurvive_link(last_pos),
-                    "is_death": is_death
+                    "status": status
                 }
                 
                 if current_name not in grouped_report:
@@ -162,16 +163,21 @@ with col1:
                     for i, ev in enumerate(events):
                         st.caption(f"🕒 {ev['time']}")
                         
-                        if ev['is_death']:
+                        # Style based on status
+                        if ev['status'] == "death":
                             st.markdown(f"<div class='death-log'>{ev['text']}</div>", unsafe_allow_html=True)
+                        elif ev['status'] == "connect":
+                            st.markdown(f"<div class='connect-log'>{ev['text']}</div>", unsafe_allow_html=True)
+                        elif ev['status'] == "disconnect":
+                            st.markdown(f"<div class='disconnect-log'>{ev['text']}</div>", unsafe_allow_html=True)
                         else:
                             st.code(ev['text'])
                         
-                        # ULTIMATE FIX: Validate link is a string and starts with http
-                        current_link = ev.get('link')
-                        if isinstance(current_link, str) and current_link.startswith("http"):
-                            btn_id = hashlib.md5(f"{player}{i}{ev['time']}".encode()).hexdigest()
-                            st.link_button(f"📍 View Location", current_link, key=f"link_{btn_id}")
+                        # THE FIX: Validate string and force non-empty
+                        url_to_use = str(ev.get('link', ""))
+                        if url_to_use.startswith("http"):
+                            safe_key = hashlib.md5(f"{player}{i}{ev['time']}".encode()).hexdigest()
+                            st.link_button("📍 View Location", url_to_use, key=f"btn_{safe_key}")
                         st.divider()
         else:
             st.download_button("💾 Download for iZurvive", st.session_state.filtered_result, "MAP_READY.adm")
