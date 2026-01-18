@@ -5,7 +5,7 @@ import streamlit.components.v1 as components
 # 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. Advanced CSS for Independent Scrolling Columns
+# 2. Advanced CSS for Independent Scrolling and Layout Tuning
 st.markdown(
     """
     <style>
@@ -23,7 +23,7 @@ st.markdown(
         height: 90vh;
     }
 
-    /* Make each column an independent scrollable box */
+    /* Independent scrollable boxes for each column */
     [data-testid="column"] {
         height: 100% !important;
         overflow-y: auto !important;
@@ -31,6 +31,12 @@ st.markdown(
         border: 1px solid #31333F;
         border-radius: 8px;
         padding: 10px;
+    }
+
+    /* Set the specific width for the right column to prevent overlap */
+    [data-testid="column"]:nth-child(2) {
+        flex: 2 1 0% !important;
+        width: 65% !important;
     }
 
     /* Style scrollbars */
@@ -96,10 +102,10 @@ def filter_logs(files, main_choice, target_player=None, sub_choice=None):
 # --- WEB UI ---
 st.title("🛡️ CyberDayZ Log Scanner")
 
-# Create two columns
-col1, col2 = st.columns([1, 1.3])
+# Column ratio updated to [1, 2] to make the map viewer much wider
+col1, col2 = st.columns([1, 2])
 
-# LEFT COLUMN: Filter Logic
+# LEFT COLUMN: Filter Logic (Now smaller)
 with col1:
     st.subheader("1. Filter Logs")
     uploaded_files = st.file_uploader("Upload .ADM Files", type=['adm', 'rpt'], accept_multiple_files=True)
@@ -130,18 +136,17 @@ with col1:
     if st.session_state.filtered_result:
         st.success("Filtered!")
         st.download_button(label="💾 Download for iZurvive", data=st.session_state.filtered_result, file_name="FOR_MAP.adm")
-        st.text_area("Scrollable Preview", st.session_state.filtered_result, height=800)
+        st.text_area("Preview", st.session_state.filtered_result, height=600)
 
-# RIGHT COLUMN: iZurvive Map
+# RIGHT COLUMN: iZurvive Map (Now wider)
 with col2:
     st.subheader("2. iZurvive Map Viewer")
     
-    # Refresh logic using a dynamic URL query instead of a component 'key'
     if st.button("🔄 Refresh Map Window"):
         st.session_state.map_version += 1
     
     st.caption("Instructions: Download file from left, then upload it into 'Serverlogs' here.")
     
-    # Embedding the iframe with a dynamic version number in the URL to force refresh
+    # Dynamic URL query to force refresh
     map_url = f"https://www.izurvive.com/serverlogs/?v={st.session_state.map_version}"
     components.iframe(map_url, height=1200, scrolling=True)
