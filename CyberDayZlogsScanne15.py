@@ -1,21 +1,18 @@
 import streamlit as st
 import io
 import math
-import hashlib
 import streamlit.components.v1 as components
 
 # 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. CSS: Forced Dark Mode, Rounded UI, and Custom Button Styles
+# 2. CSS: Forced Dark Mode, Rounded UI, and Button Fixes
 st.markdown(
     """
     <style>
-    /* Force Dark Theme */
     .stApp { background-color: #0e1117; color: #fafafa; }
     #MainMenu, header, footer { visibility: hidden; }
 
-    /* Rounded File Uploader */
     [data-testid="stFileUploader"] {
         background-color: #161b22;
         border: 1px solid #31333F;
@@ -23,7 +20,6 @@ st.markdown(
         padding: 20px;
     }
     
-    /* Dark Mode Buttons Styling */
     div.stButton > button, div.stLinkButton > a {
         background-color: #262730 !important;
         color: #ffffff !important;
@@ -40,7 +36,6 @@ st.markdown(
         color: #ff4b4b !important;
     }
 
-    /* Event Category Colors */
     .death-log { color: #ff4b4b; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; }
     .connect-log { color: #28a745; border-left: 3px solid #28a745; padding-left: 10px; }
     .disconnect-log { color: #ffc107; border-left: 3px solid #ffc107; padding-left: 10px; }
@@ -65,7 +60,6 @@ st.markdown(
 # 3. Helper Functions
 def make_izurvive_link(coords):
     if coords and isinstance(coords, list) and len(coords) >= 2:
-        # X and Y raw engine coordinates for inland plotting
         return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
     return ""
 
@@ -78,23 +72,25 @@ def extract_player_and_coords(line):
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
-            # FIXED: Using index 0 (X) and index 1 (Y) for inland positioning
+            # Index 0 (X) and Index 1 (Y) for inland positioning
             coords = [float(parts[0]), float(parts[1])]
     except:
         pass 
     return str(name), coords
 
-# 4. Filter Logic: DISCARD events without coordinates to prevent errors
-def filter_logs(files, mode):
+# 4. Filter Logic
+def filter_logs(files, mode, target_player=None, sub_choice=None):
     grouped_report = {} 
     player_positions = {} 
-
     all_lines = []
+
     for uploaded_file in files:
         content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
         all_lines.extend(content.splitlines())
 
-    session_keys = ["is connected", "disconnected", "connecting", "connected", "died", "killed", "bled out"]
+    placement_keys = ["placed", "built", "folded", "shelterfabric", "mounted"]
+    raid_keys = ["dismantled", "unmount", "packed", "barbedwirehit", "fireplace", "gardenplot"]
+    session_keys = ["connected", "disconnected", "connecting", "died", "killed", "bled out", "suicide"]
 
     for line in all_lines:
         if "|" not in line: continue
@@ -103,30 +99,43 @@ def filter_logs(files, mode):
         if name != "System/Server" and coords:
             player_positions[name] = coords
 
-        if mode == "Session Tracking (Global)":
-            low = line.lower()
-            if any(k in low for k in session_keys):
-                current_name, _ = extract_player_and_coords(line)
-                last_pos = player_positions.get(current_name)
-                link = make_izurvive_link(last_pos)
-                
-                # Only save if we have a valid link
-                if link.startswith("http"):
-                    status = "normal"
-                    if any(d in low for d in ["died", "killed", "bled out"]): status = "death"
-                    elif "connect" in low: status = "connect"
-                    elif "disconnect" in low: status = "disconnect"
+        low = line.lower()
+        
+        # Determine if we should process this line based on mode
+        should_process = False
+        if mode == "Activity per Specific Player" and target_player == name:
+            if sub_choice == "Full History": should_process = True
+            elif sub_choice == "Movement Only" and "pos=" in low: should_process = True
+            elif sub_choice == "Movement + Building":
+                if ("pos=" in low or any(k in low for k in placement_keys)) and "hit" not in low:
+                    should_process = True
+            elif sub_choice == "Movement + Raid Watch":
+                if ("pos=" in low or any(k in low for k in raid_keys)) and "built" not in low:
+                    should_process = True
+        
+        elif mode == "Session Tracking (Global)":
+            if any(k in low for k in session_keys): should_process = True
 
-                    event_entry = {
-                        "time": str(line.split(" | ")[0]),
-                        "text": str(line.strip()),
-                        "link": link,
-                        "status": status
-                    }
+        if should_process:
+            last_pos = player_positions.get(name)
+            link = make_izurvive_link(last_pos)
+            
+            if link.startswith("http"):
+                status = "normal"
+                if any(d in low for d in ["died", "killed", "suicide", "bled out"]): status = "death"
+                elif "connect" in low: status = "connect"
+                elif "disconnect" in low: status = "disconnect"
 
-                    if current_name not in grouped_report:
-                        grouped_report[current_name] = []
-                    grouped_report[current_name].append(event_entry)
+                event_entry = {
+                    "time": str(line.split(" | ")[0]),
+                    "text": str(line.strip()),
+                    "link": link,
+                    "status": status
+                }
+
+                if name not in grouped_report:
+                    grouped_report[name] = []
+                grouped_report[name].append(event_entry)
     
     return grouped_report
 
@@ -139,24 +148,31 @@ with col1:
     uploaded_files = st.file_uploader("Upload .ADM", type=['adm', 'rpt'], accept_multiple_files=True)
 
     if uploaded_files:
-        mode = st.selectbox("Select Filter", ["Session Tracking (Global)", "All Map Positions"])
+        mode = st.selectbox("Select Filter", ["Activity per Specific Player", "Session Tracking (Global)"])
+        
+        target_player = None
+        sub_choice = None
+        
+        if mode == "Activity per Specific Player":
+            temp_all = []
+            for f in uploaded_files:
+                temp_all.extend(f.getvalue().decode("utf-8", errors="ignore").splitlines())
+            # Extract player list for dropdown
+            player_list = sorted(list(set(line.split('"')[1] for line in temp_all if 'Player "' in line)))
+            target_player = st.selectbox("Select Player", player_list)
+            sub_choice = st.radio("Detail Level", ["Full History", "Movement Only", "Movement + Building", "Movement + Raid Watch"])
+
         if st.button("🚀 Process"):
-            st.session_state.track_data = filter_logs(uploaded_files, mode)
+            st.session_state.track_data = filter_logs(uploaded_files, mode, target_player, sub_choice)
 
     if "track_data" in st.session_state:
-        query = st.text_input("🔍 Search Player", "").lower()
-        
-        sorted_players = sorted(st.session_state.track_data.keys())
-        for p in sorted_players:
-            if query and query not in p.lower(): continue
-            
+        st.subheader("📍 Player Activity Results")
+        for p in sorted(st.session_state.track_data.keys()):
             events = st.session_state.track_data[p]
             with st.expander(f"👤 {p} ({len(events)} events)"):
                 for ev in events:
                     st.caption(f"🕒 {ev['time']}")
                     st.markdown(f"<div class='{ev['status']}-log'>{ev['text']}</div>", unsafe_allow_html=True)
-                    
-                    # FIXED: Removed the 'key' argument which caused the TypeError
                     st.link_button("📍 View on Map", ev['link'])
                     st.divider()
 
