@@ -5,42 +5,34 @@ import streamlit.components.v1 as components
 # 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. Custom CSS to fix the right column (Zone 2) and make it independent
+# 2. Custom CSS to fix the right column position (Zone 2)
 st.markdown(
     """
     <style>
-    /* Fix the right column position */
-    [data-testid="column"]:nth-child(2) {
-        position: fixed;
-        right: 1rem;
-        top: 5rem;
-        width: 55%;
-        height: 85vh;
-        z-index: 1000;
+    /* Fix the right column (the map) so it stays pinned while left side scrolls */
+    @media (min-width: 768px) {
+        [data-testid="column"]:nth-child(2) {
+            position: fixed;
+            right: 20px;
+            top: 50px;
+            width: 55%;
+            height: 90vh;
+            z-index: 100;
+        }
     }
     
-    /* Ensure the left column has enough space to scroll */
-    [data-testid="column"]:nth-child(1) {
-        margin-right: 60%;
-    }
-
-    /* Style for the Map Container */
-    .map-container {
-        border: 2px solid #ff4b4b;
-        border-radius: 10px;
-        overflow: hidden;
-        background-color: white;
+    /* Give the overall page a cleaner look */
+    .main {
+        background-color: #0e1117;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# 3. Initialize Session State (This keeps your files loaded)
+# 3. Initialize Session State
 if "filtered_result" not in st.session_state:
     st.session_state.filtered_result = None
-if "map_key" not in st.session_state:
-    st.session_state.map_key = 0
 
 def filter_logs(files, main_choice, target_player=None, sub_choice=None):
     all_lines = []
@@ -86,18 +78,18 @@ def filter_logs(files, main_choice, target_player=None, sub_choice=None):
     return header + "".join(final_output)
 
 # --- WEB UI ---
-st.title("🛡️ CyberDayZ Scanner V2")
+st.title("🛡️ CyberDayZ Scanner")
 
 # Create two columns
 col1, col2 = st.columns([1, 1.4])
 
-# LEFT COLUMN: Scanner logic
+# LEFT COLUMN: Filter Logic
 with col1:
-    st.subheader("1. Log Filter")
+    st.subheader("1. Filter Logs")
     uploaded_files = st.file_uploader("Upload .ADM Files", type=['adm', 'rpt'], accept_multiple_files=True)
 
     if uploaded_files:
-        mode = st.selectbox("Filter Type", [
+        mode = st.selectbox("Filter Mode", [
             "Activity per Specific Player", 
             "All Death Locations", 
             "All Placements", 
@@ -118,33 +110,22 @@ with col1:
 
         if st.button("🚀 Process Logs"):
             st.session_state.filtered_result = filter_logs(uploaded_files, mode, target_player, sub_choice)
-            st.success("Filtered! Use the download button below.")
 
-    # Show results if they exist in session state
+    # Persistent Output (Doesn't disappear when you scroll or interact)
     if st.session_state.filtered_result:
+        st.success("Filtered!")
         st.download_button(
             label="💾 Download Filtered ADM",
             data=st.session_state.filtered_result,
-            file_name="MAP_THIS.adm",
+            file_name="FILTERED_LOGS.adm",
             mime="text/plain"
         )
-        st.text_area("Preview", st.session_state.filtered_result, height=400)
+        st.text_area("Filtered Logs Preview", st.session_state.filtered_result, height=600)
 
-# RIGHT COLUMN: Map Viewer
+# RIGHT COLUMN: Floating Map Viewer
 with col2:
-    st.subheader("2. iZurvive Viewer")
+    st.subheader("2. iZurvive Map")
+    st.info("Download the file on the left, then upload it into 'Serverlogs' here.")
     
-    # Refresh button for map ONLY
-    if st.button("🔄 Refresh Map Window"):
-        st.session_state.map_key += 1
-    
-    st.caption("Instructions: Download the ADM on the left, then upload it into 'Serverlogs' here.")
-
-    # The key=st.session_state.map_key is what allows us to refresh the map 
-    # without affecting the file uploader on the left.
-    components.iframe(
-        f"https://www.izurvive.com/serverlogs/", 
-        height=800, 
-        scrolling=True,
-        key=f"map_frame_{st.session_state.map_key}"
-    )
+    # iframe without the 'key' argument to prevent the TypeError
+    components.iframe("https://www.izurvive.com/serverlogs/", height=800, scrolling=True)
