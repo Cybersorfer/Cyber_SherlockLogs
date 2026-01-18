@@ -5,11 +5,11 @@ import streamlit.components.v1 as components
 # 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. Ultra-Tight CSS: Removes all top gaps and maximizes vertical space
+# 2. Tightened CSS: Fixes overlap and pushes content to the absolute top
 st.markdown(
     """
     <style>
-    /* Hide Streamlit elements at the top */
+    /* Hide default Streamlit elements */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
@@ -23,6 +23,12 @@ st.markdown(
         max-width: 100%;
     }
 
+    /* Fixed alignment for the title and columns */
+    [data-testid="stMarkdownContainer"] h4 {
+        margin-top: -15px !important; /* Pull the main logo/title higher */
+        margin-bottom: 10px !important;
+    }
+
     /* DESKTOP VIEW: Independent Columns */
     @media (min-width: 768px) {
         .main {
@@ -30,12 +36,12 @@ st.markdown(
         }
         [data-testid="stHorizontalBlock"] {
             height: 98vh;
-            margin-top: -30px; /* Pulls the content up even further */
+            margin-top: -20px; /* Pulls columns up to meet the title */
         }
         [data-testid="column"] {
             height: 100% !important;
             overflow-y: auto !important;
-            padding-top: 10px;
+            padding-top: 15px; /* Adds space inside the border so text doesn't touch the top */
             border: 1px solid #31333F;
             border-radius: 8px;
         }
@@ -112,12 +118,14 @@ def filter_logs(files, main_choice, target_player=None, sub_choice=None):
     return header + "".join(final_output)
 
 # --- WEB UI ---
-# Use smaller headings to pull text up
+# The main logo/title - CSS pulls this to the top
 st.markdown("#### 🛡️ CyberDayZ Scanner")
 
 col1, col2 = st.columns([1, 2.5])
 
 with col1:
+    # Adding a small space to ensure "1. Filter Logs" doesn't touch the top border
+    st.write("") 
     st.write("**1. Filter Logs**")
     uploaded_files = st.file_uploader("Upload .ADM", type=['adm', 'rpt'], accept_multiple_files=True)
 
@@ -145,12 +153,15 @@ with col1:
         st.download_button(label="💾 Download ADM", data=st.session_state.filtered_result, file_name="FOR_MAP.adm")
 
 with col2:
-    # Inline row for header and button to save space
+    # Layout row for the map header and refresh button
     c1, c2 = st.columns([3, 1])
-    with c1: st.write("**2. iZurvive Map**")
+    with c1: 
+        st.write("") 
+        st.write("**2. iZurvive Map**")
     with c2: 
         if st.button("🔄 Refresh"):
             st.session_state.map_version += 1
     
+    # Map with dynamic versioning to avoid refresh errors
     map_url = f"https://www.izurvive.com/serverlogs/?v={st.session_state.map_version}"
     components.iframe(map_url, height=1100, scrolling=True)
