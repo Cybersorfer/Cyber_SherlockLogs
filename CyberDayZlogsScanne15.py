@@ -28,57 +28,59 @@ st.markdown(
 # 3. Helper Functions
 def make_izurvive_link(coords):
     if coords:
-        # iZurvive URL format: location=X;Y
+        # DayZ Map coordinates for Chernarus
         return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
     return None
 
 def extract_player_and_coords(line):
-    """Extracts Player Name and [X, Y] coordinates from a line if available."""
+    """Safely extracts Player Name and [X, Y] coordinates."""
+    name = "System/Server"
+    coords = None
     try:
-        name = line.split('Player "')[1].split('"')[0]
+        if 'Player "' in line:
+            name = line.split('Player "')[1].split('"')[0]
+        
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
-            return name, [float(parts[0]), float(parts[2])]
-        return name, None
-    except:
-        return None, None
+            # DayZ logs use X, Altitude, Y format
+            coords = [float(parts[0]), float(parts[2])]
+    except Exception:
+        pass 
+    return name, coords
 
-# 4. Fixed Session Logic
+# 4. Filter Logic
 def filter_logs(files, main_choice):
     final_output = []
     session_report = []
-    player_positions = {} # Stores { "PlayerName": [X, Y] }
+    player_positions = {} 
 
     all_lines = []
     for uploaded_file in files:
         content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
         all_lines.extend(content.splitlines())
 
-    session_keys = ["is connected", "has been disconnected", "is connecting"]
+    session_keys = ["is connected", "has been disconnected", "is connecting", "connected"]
 
     for line in all_lines:
         if "|" not in line: continue
         
-        # 1. Update player positions from ANY line that has them (PlayerList, Building, etc.)
+        # Capture positions from any line to keep the 'memory' updated
         name, coords = extract_player_and_coords(line)
-        if name and coords:
+        if name != "System/Server" and coords:
             player_positions[name] = coords
 
-        # 2. If it's a Session event, grab the last known position for that player
         if main_choice == "Session Tracking (Global)":
             low = line.lower()
             if any(k in low for k in session_keys):
-                # Try to find name even if no pos in this specific line
-                event_name = line.split('Player "')[1].split('"')[0] if 'Player "' in line else "Unknown"
-                last_pos = player_positions.get(event_name)
+                # Use the helper to get name for this specific line
+                current_name, _ = extract_player_and_coords(line)
+                last_pos = player_positions.get(current_name)
                 
-                link = make_izurvive_link(last_pos)
                 session_report.append({
                     "text": line.strip(),
-                    "link": link,
-                    "coords": last_pos,
-                    "player": event_name
+                    "link": make_izurvive_link(last_pos),
+                    "player": current_name
                 })
                 final_output.append(line)
     
@@ -106,14 +108,16 @@ with col1:
 
     if st.session_state.filtered_result:
         if mode == "Session Tracking (Global)":
-            st.info("💡 Individual events below have map links based on last known positions.")
+            st.info("💡 Map links generated from last known player positions.")
             for item in st.session_state.session_report:
-                with st.expander(f"👤 {item['player']} - {item['text'][:30]}..."):
+                # Fixed: Now uses a default name if 'player' key is missing or failed
+                display_name = item.get('player', 'Unknown Player')
+                with st.expander(f"👤 {display_name} - {item['text'][:30]}..."):
                     st.code(item['text'])
-                    if item['link']:
-                        st.link_button(f"📍 View {item['player']} on Map", item['link'])
+                    if item.get('link'):
+                        st.link_button(f"📍 View {display_name} on Map", item['link'])
                     else:
-                        st.caption("No coordinates found for this player in this file.")
+                        st.caption("No coordinates found for this player.")
         else:
             st.download_button("💾 Download for iZurvive", st.session_state.filtered_result, "MAP_READY.adm")
 
