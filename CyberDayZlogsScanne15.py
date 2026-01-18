@@ -6,7 +6,7 @@ import streamlit.components.v1 as components
 # 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. Ultra-Tight CSS for Absolute Top Layout
+# 2. Tight CSS for Layout
 st.markdown(
     """
     <style>
@@ -26,22 +26,23 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 3. DayZ Coordinate Math Helper
-def get_distance(pos1, pos2):
-    """Calculates distance between two DayZ coordinate points (x, y)"""
-    return math.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
-
+# 3. Helper Functions for iZurvive Compatibility
 def extract_coords(line):
-    """Pulls x and y from a log line string like <1234.5, 67.8, 9012.3>"""
+    """Pulls x and y from a line. DayZ logs use: pos=<X, Z, Y> (Z is height)"""
     try:
         if "pos=<" in line:
-            parts = line.split("pos=<")[1].split(">")[0].split(",")
-            return [float(parts[0]), float(parts[2])] # DayZ logs are X, Z, Y
+            raw_pos = line.split("pos=<")[1].split(">")[0]
+            parts = raw_pos.split(",")
+            # We need the 1st (X) and 3rd (Y) numbers for map distance
+            return [float(parts[0].strip()), float(parts[2].strip())]
     except:
         return None
     return None
 
-# 4. Main Locations Dictionary
+def get_distance(pos1, pos2):
+    return math.sqrt((pos1[0] - pos2[0])**2 + (pos1[1] - pos2[1])**2)
+
+# 4. Location Data
 CHERNARUS_LOCATIONS = {
     "NW Airfield (NWAF)": ([12134, 12634], 1500),
     "VMC (Military Base)": ([7960, 5990], 600),
@@ -52,34 +53,49 @@ CHERNARUS_LOCATIONS = {
     "Chernogorsk": ([6500, 2500], 2000)
 }
 
-# 5. Updated Filter Logic with Town Feature
+# 5. Fixed Filter Logic for iZurvive Compatibility
 def filter_logs(files, main_choice, target_player=None, town_choice=None):
-    all_lines = []
-    header = "******************************************************************************\n"
-    header += f"AdminLog started on Web_Filter_Session - Mode: {main_choice}\n"
+    final_output = []
     
-    town_coords = None
-    town_radius = 0
-    if main_choice == "Activity Near Specific Town" and town_choice in CHERNARUS_LOCATIONS:
-        town_coords, town_radius = CHERNARUS_LOCATIONS[town_choice]
+    # iZurvive MUST have this exact line at the very beginning to work
+    header = "AdminLog started on 00:00:00\n" 
 
     for uploaded_file in files:
-        stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8", errors="ignore"))
-        for line in stringio:
-            if "|" in line and ":" in line:
-                # Town Filter logic
+        content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
+        lines = content.splitlines()
+        
+        town_coords = None
+        town_radius = 0
+        if main_choice == "Activity Near Specific Town" and town_choice in CHERNARUS_LOCATIONS:
+            town_coords, town_radius = CHERNARUS_LOCATIONS[town_choice]
+
+        for line in lines:
+            # We only want lines that have coordinates so iZurvive can plot them
+            if "pos=<" in line:
+                # Town Filter
                 if town_coords:
                     line_coords = extract_coords(line)
                     if line_coords and get_distance(line_coords, town_coords) <= town_radius:
-                        all_lines.append(line)
-                # Player Filter logic
-                elif target_player and target_player in line:
-                    all_lines.append(line)
-                # Global/Other logic
-                elif not town_coords and not target_player:
-                    all_lines.append(line)
+                        final_output.append(line)
+                
+                # Player Filter
+                elif main_choice == "Activity per Specific Player" and target_player:
+                    if target_player in line:
+                        final_output.append(line)
+                
+                # Global (Deaths or Raids)
+                elif main_choice in ["All Death Locations", "RAID WATCH (Global)"]:
+                    low = line.lower()
+                    if main_choice == "All Death Locations" and any(x in low for x in ["killed", "died", "suicide"]):
+                        final_output.append(line)
+                    elif main_choice == "RAID WATCH (Global)" and any(x in low for x in ["dismantled", "unmount", "packed"]):
+                        final_output.append(line)
+                
+                # Default: keep all with positions
+                elif main_choice == "Everything with Coordinates":
+                    final_output.append(line)
 
-    return header + "".join(all_lines)
+    return header + "\n".join(final_output)
 
 # --- WEB UI ---
 if "filtered_result" not in st.session_state: st.session_state.filtered_result = None
@@ -95,6 +111,7 @@ with col1:
 
     if uploaded_files:
         mode = st.selectbox("Select Filter Feature", [
+            "Everything with Coordinates",
             "Activity Near Specific Town", 
             "Activity per Specific Player", 
             "RAID WATCH (Global)",
@@ -106,8 +123,6 @@ with col1:
 
         if mode == "Activity Near Specific Town":
             town_choice = st.selectbox("Select Town/Area", list(CHERNARUS_LOCATIONS.keys()))
-            st.info(f"Scanning within {CHERNARUS_LOCATIONS[town_choice][1]}m of center.")
-
         elif mode == "Activity per Specific Player":
             temp_all = []
             for f in uploaded_files: temp_all.extend(f.getvalue().decode("utf-8", errors="ignore").splitlines())
@@ -116,9 +131,10 @@ with col1:
 
         if st.button("🚀 Process"):
             st.session_state.filtered_result = filter_logs(uploaded_files, mode, target_player, town_choice)
+            st.success("File Ready!")
 
     if st.session_state.filtered_result:
-        st.download_button(label="💾 Download for Map", data=st.session_state.filtered_result, file_name="TOWN_SCAN.adm")
+        st.download_button(label="💾 Download for Map", data=st.session_state.filtered_result, file_name="IZURVIVE_READY.adm")
 
 with col2:
     c1, c2 = st.columns([3, 1])
