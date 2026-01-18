@@ -20,7 +20,7 @@ st.markdown(
 
     /* Target the column container */
     [data-testid="stHorizontalBlock"] {
-        height: 85vh;
+        height: 90vh;
     }
 
     /* Make each column an independent scrollable box */
@@ -28,9 +28,12 @@ st.markdown(
         height: 100% !important;
         overflow-y: auto !important;
         padding-right: 15px;
+        border: 1px solid #31333F;
+        border-radius: 8px;
+        padding: 10px;
     }
 
-    /* Style the scrollbar for a cleaner look */
+    /* Style scrollbars */
     [data-testid="column"]::-webkit-scrollbar {
         width: 6px;
     }
@@ -91,15 +94,15 @@ def filter_logs(files, main_choice, target_player=None, sub_choice=None):
     return header + "".join(final_output)
 
 # --- WEB UI ---
-st.title("🛡️ CyberDayZ Log Scanner V3")
+st.title("🛡️ CyberDayZ Log Scanner")
 
 # Create two columns
 col1, col2 = st.columns([1, 1.3])
 
-# LEFT COLUMN: Filter Logic (Independent Scroll)
+# LEFT COLUMN: Filter Logic
 with col1:
-    st.subheader("1. Filter Settings")
-    uploaded_files = st.file_uploader("Upload .ADM or .RPT Files", type=['adm', 'rpt'], accept_multiple_files=True)
+    st.subheader("1. Filter Logs")
+    uploaded_files = st.file_uploader("Upload .ADM Files", type=['adm', 'rpt'], accept_multiple_files=True)
 
     if uploaded_files:
         mode = st.selectbox("Select Filter", [
@@ -118,31 +121,27 @@ with col1:
             for f in uploaded_files:
                 temp_all.extend(f.getvalue().decode("utf-8", errors="ignore").splitlines())
             player_list = sorted(list(set(line.split('"')[1] for line in temp_all if 'Player "' in line)))
-            target_player = st.selectbox("Target Player", player_list)
+            target_player = st.selectbox("Select Player", player_list)
             sub_choice = st.radio("Detail", ["Full History", "Movement Only", "Movement + Building", "Movement + Raid Watch"])
 
         if st.button("🚀 Process Logs"):
             st.session_state.filtered_result = filter_logs(uploaded_files, mode, target_player, sub_choice)
 
     if st.session_state.filtered_result:
-        st.success("Filtered Logs Ready!")
+        st.success("Filtered!")
         st.download_button(label="💾 Download for iZurvive", data=st.session_state.filtered_result, file_name="FOR_MAP.adm")
-        st.text_area("Preview (Scrollable)", st.session_state.filtered_result, height=800)
+        st.text_area("Scrollable Preview", st.session_state.filtered_result, height=800)
 
-# RIGHT COLUMN: iZurvive Map (Independent Scroll + Refresh)
+# RIGHT COLUMN: iZurvive Map
 with col2:
-    st.subheader("2. iZurvive Map")
+    st.subheader("2. iZurvive Map Viewer")
     
-    # Independent Refresh Button
+    # Refresh logic using a dynamic URL query instead of a component 'key'
     if st.button("🔄 Refresh Map Window"):
         st.session_state.map_version += 1
     
-    st.info("Download file from left, then click 'Filter' -> 'Serverlogs' here.")
+    st.caption("Instructions: Download file from left, then upload it into 'Serverlogs' here.")
     
-    # Map component with versioning key to allow refresh
-    components.iframe(
-        f"https://www.izurvive.com/serverlogs/", 
-        height=1200, 
-        scrolling=True,
-        key=f"map_v_{st.session_state.map_version}"
-    )
+    # Embedding the iframe with a dynamic version number in the URL to force refresh
+    map_url = f"https://www.izurvive.com/serverlogs/?v={st.session_state.map_version}"
+    components.iframe(map_url, height=1200, scrolling=True)
