@@ -33,10 +33,10 @@ st.markdown(
         padding: 10px;
     }
 
-    /* Set the specific width for the right column to prevent overlap */
+    /* Set the specific width for the right column to be much wider */
     [data-testid="column"]:nth-child(2) {
-        flex: 2 1 0% !important;
-        width: 65% !important;
+        flex: 2.5 1 0% !important;
+        width: 70% !important;
     }
 
     /* Style scrollbars */
@@ -102,10 +102,10 @@ def filter_logs(files, main_choice, target_player=None, sub_choice=None):
 # --- WEB UI ---
 st.title("🛡️ CyberDayZ Log Scanner")
 
-# Column ratio updated to [1, 2] to make the map viewer much wider
-col1, col2 = st.columns([1, 2])
+# Column ratio set to make the map viewer much wider [1, 2.5]
+col1, col2 = st.columns([1, 2.5])
 
-# LEFT COLUMN: Filter Logic (Now smaller)
+# LEFT COLUMN: Filter Logic
 with col1:
     st.subheader("1. Filter Logs")
     uploaded_files = st.file_uploader("Upload .ADM Files", type=['adm', 'rpt'], accept_multiple_files=True)
@@ -128,24 +128,28 @@ with col1:
                 temp_all.extend(f.getvalue().decode("utf-8", errors="ignore").splitlines())
             player_list = sorted(list(set(line.split('"')[1] for line in temp_all if 'Player "' in line)))
             target_player = st.selectbox("Select Player", player_list)
-            sub_choice = st.radio("Detail", ["Full History", "Movement Only", "Movement + Building", "Movement + Raid Watch"])
+            sub_choice = st.radio("Detail Level", ["Full History", "Movement Only", "Movement + Building", "Movement + Raid Watch"])
 
         if st.button("🚀 Process Logs"):
             st.session_state.filtered_result = filter_logs(uploaded_files, mode, target_player, sub_choice)
+            st.success("Filtered! Ready to download.")
 
     if st.session_state.filtered_result:
-        st.success("Filtered!")
-        st.download_button(label="💾 Download for iZurvive", data=st.session_state.filtered_result, file_name="FOR_MAP.adm")
-        st.text_area("Preview", st.session_state.filtered_result, height=600)
+        # Download button remains so you can get the file for iZurvive
+        st.download_button(
+            label="💾 Download for iZurvive", 
+            data=st.session_state.filtered_result, 
+            file_name="FOR_MAP.adm",
+            mime="text/plain"
+        )
+        st.info("Download the file above and upload it to the iZurvive map on the right.")
 
-# RIGHT COLUMN: iZurvive Map (Now wider)
+# RIGHT COLUMN: iZurvive Map
 with col2:
     st.subheader("2. iZurvive Map Viewer")
     
     if st.button("🔄 Refresh Map Window"):
         st.session_state.map_version += 1
-    
-    st.caption("Instructions: Download file from left, then upload it into 'Serverlogs' here.")
     
     # Dynamic URL query to force refresh
     map_url = f"https://www.izurvive.com/serverlogs/?v={st.session_state.map_version}"
