@@ -16,7 +16,6 @@ st.markdown(
     footer {visibility: hidden;}
     .block-container { padding-top: 0rem !important; padding-bottom: 0rem !important; max-width: 100%; }
     
-    /* Death Highlight Styling */
     .death-log {
         color: #ff4b4b;
         font-weight: bold;
@@ -39,24 +38,28 @@ st.markdown(
 
 # 3. Helper Functions
 def make_izurvive_link(coords):
-    if coords:
-        # X=0, Y=1 (Engine coordinates for inland plotting)
+    if coords and len(coords) >= 2:
+        # Returns a string link. If coords are missing, returns empty string.
         return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
-    return None
+    return ""
 
 def extract_player_and_coords(line):
+    """Refined extraction to handle more DayZ log variations."""
     name = "System/Server"
     coords = None
     try:
         if 'Player "' in line:
+            # Better splitting to handle names like "Player Name"(id=...)
             name = line.split('Player "')[1].split('"')[0]
+        
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
+            # X=index 0, Y=index 1 (Engine Coords)
             coords = [float(parts[0]), float(parts[1])]
     except:
         pass 
-    return name, coords
+    return str(name), coords
 
 # 4. Filter Logic with Grouping
 def filter_logs(files, main_choice):
@@ -87,8 +90,8 @@ def filter_logs(files, main_choice):
                 is_death = any(d in low for d in ["died", "killed", "suicide", "bled out"])
                 
                 event_entry = {
-                    "time": line.split(" | ")[0] if " | " in line else "00:00:00",
-                    "text": line.strip(),
+                    "time": str(line.split(" | ")[0]) if " | " in line else "00:00:00",
+                    "text": str(line.strip()),
                     "link": make_izurvive_link(last_pos),
                     "is_death": is_death
                 }
@@ -126,23 +129,23 @@ with col1:
             sorted_players = sorted(st.session_state.grouped_report.keys())
             
             for player in sorted_players:
-                if search_query and search_query not in player.lower():
+                if search_query and search_query not in str(player).lower():
                     continue
                     
                 events = st.session_state.grouped_report[player]
                 with st.expander(f"👤 {player} ({len(events)} events)"):
-                    for ev in events:
+                    for i, ev in enumerate(events):
                         st.caption(f"🕒 {ev['time']}")
                         
-                        # Apply Death Highlight if applicable
                         if ev['is_death']:
                             st.markdown(f"<div class='death-log'>{ev['text']}</div>", unsafe_allow_html=True)
                         else:
                             st.code(ev['text'])
                         
-                        # FIXED: Only show button if a valid link exists
-                        if ev['link']:
-                            btn_id = hashlib.md5(f"{player}{ev['time']}{ev['text']}".encode()).hexdigest()
+                        # GUARANTEED FIX: check if link is a non-empty string
+                        if ev.get('link') and len(ev['link']) > 5:
+                            # Unique key incorporates index to avoid collisions
+                            btn_id = hashlib.md5(f"{player}{i}{ev['time']}".encode()).hexdigest()
                             st.link_button(f"📍 View Location", ev['link'], key=f"link_{btn_id}")
                         st.divider()
         else:
