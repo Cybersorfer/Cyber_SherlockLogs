@@ -4,16 +4,35 @@ import math
 import hashlib
 import streamlit.components.v1 as components
 
-# 1. Setup Page Config
-st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
+# 1. Setup Page Config & Force Dark Mode
+st.set_page_config(
+    page_title="CyberDayZ Log Scanner", 
+    layout="wide", 
+    initial_sidebar_state="collapsed"
+)
 
-# 2. CSS for Layout and Death Highlighting
+# 2. Comprehensive CSS: Forced Dark Mode & Layout Fixes
 st.markdown(
     """
     <style>
+    /* Force Dark Theme Colors */
+    :root {
+        --primary-color: #ff4b4b;
+        --background-color: #0e1117;
+        --secondary-background-color: #262730;
+        --text-color: #fafafa;
+    }
+    
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
+    
+    /* Dark Mode specific overrides */
+    .stApp {
+        background-color: #0e1117;
+        color: #fafafa;
+    }
+
     .block-container { padding-top: 0rem !important; padding-bottom: 0rem !important; max-width: 100%; }
     
     .death-log {
@@ -29,7 +48,14 @@ st.markdown(
     @media (min-width: 768px) {
         .main { overflow: hidden; }
         [data-testid='stHorizontalBlock'] { height: 98vh; margin-top: -20px; }
-        [data-testid='column'] { height: 100% !important; overflow-y: auto !important; padding-top: 15px; border: 1px solid #31333F; border-radius: 8px; }
+        [data-testid='column'] { 
+            height: 100% !important; 
+            overflow-y: auto !important; 
+            padding-top: 15px; 
+            border: 1px solid #4b4b4b; 
+            border-radius: 8px;
+            background-color: #161b22;
+        }
     }
     </style>
     """,
@@ -38,30 +64,29 @@ st.markdown(
 
 # 3. Helper Functions
 def make_izurvive_link(coords):
-    if coords and len(coords) >= 2:
-        # Returns a string link. If coords are missing, returns empty string.
+    if coords and isinstance(coords, list) and len(coords) >= 2:
+        # Return link only if coordinates are valid numbers
         return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
-    return ""
+    return None
 
 def extract_player_and_coords(line):
-    """Refined extraction to handle more DayZ log variations."""
     name = "System/Server"
     coords = None
     try:
         if 'Player "' in line:
-            # Better splitting to handle names like "Player Name"(id=...)
+            # Extract name correctly even if ID follows immediately
             name = line.split('Player "')[1].split('"')[0]
         
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
-            # X=index 0, Y=index 1 (Engine Coords)
+            # X=0, Y=1 logic for inland positioning
             coords = [float(parts[0]), float(parts[1])]
     except:
         pass 
     return str(name), coords
 
-# 4. Filter Logic with Grouping
+# 4. Filter Logic
 def filter_logs(files, main_choice):
     final_output = []
     grouped_report = {} 
@@ -142,11 +167,11 @@ with col1:
                         else:
                             st.code(ev['text'])
                         
-                        # GUARANTEED FIX: check if link is a non-empty string
-                        if ev.get('link') and len(ev['link']) > 5:
-                            # Unique key incorporates index to avoid collisions
+                        # ULTIMATE FIX: Validate link is a string and starts with http
+                        current_link = ev.get('link')
+                        if isinstance(current_link, str) and current_link.startswith("http"):
                             btn_id = hashlib.md5(f"{player}{i}{ev['time']}".encode()).hexdigest()
-                            st.link_button(f"📍 View Location", ev['link'], key=f"link_{btn_id}")
+                            st.link_button(f"📍 View Location", current_link, key=f"link_{btn_id}")
                         st.divider()
         else:
             st.download_button("💾 Download for iZurvive", st.session_state.filtered_result, "MAP_READY.adm")
