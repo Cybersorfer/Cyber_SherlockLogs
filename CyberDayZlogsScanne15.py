@@ -1,12 +1,13 @@
 import streamlit as st
 import io
 import math
+import hashlib
 import streamlit.components.v1 as components
 
 # 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. CSS for Layout
+# 2. CSS for Independent Scrolling & Layout
 st.markdown(
     """
     <style>
@@ -28,7 +29,6 @@ st.markdown(
 # 3. Helper Functions
 def make_izurvive_link(coords):
     if coords:
-        # X and Y raw engine coordinates
         return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
     return None
 
@@ -41,7 +41,7 @@ def extract_player_and_coords(line):
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
-            # Corrected Indexing: X=0, Y=1
+            # X=0, Y=1 (as requested for inland positioning)
             coords = [float(parts[0]), float(parts[1])]
     except:
         pass 
@@ -50,7 +50,7 @@ def extract_player_and_coords(line):
 # 4. Filter Logic with Grouping
 def filter_logs(files, main_choice):
     final_output = []
-    grouped_report = {} # { "PlayerName": [ {event_data}, ... ] }
+    grouped_report = {} 
     player_positions = {} 
 
     all_lines = []
@@ -76,8 +76,7 @@ def filter_logs(files, main_choice):
                 event_entry = {
                     "time": line.split(" | ")[0] if " | " in line else "00:00:00",
                     "text": line.strip(),
-                    "link": make_izurvive_link(last_pos),
-                    "coords": last_pos
+                    "link": make_izurvive_link(last_pos)
                 }
                 
                 if current_name not in grouped_report:
@@ -109,19 +108,26 @@ with col1:
 
     if st.session_state.filtered_result:
         if mode == "Session Tracking (Global)":
-            st.info(f"📊 Tracking {len(st.session_state.grouped_report)} Players")
+            # --- NEW SEARCH FEATURE ---
+            search_query = st.text_input("🔍 Search Player Name", "").lower()
             
-            # Sort players alphabetically for fast reading
+            st.info(f"📊 {len(st.session_state.grouped_report)} Players Found")
+            
             sorted_players = sorted(st.session_state.grouped_report.keys())
             
             for player in sorted_players:
+                if search_query and search_query not in player.lower():
+                    continue
+                    
                 events = st.session_state.grouped_report[player]
                 with st.expander(f"👤 {player} ({len(events)} events)"):
                     for ev in events:
                         st.caption(f"🕒 {ev['time']}")
                         st.code(ev['text'])
                         if ev['link']:
-                            st.link_button(f"📍 View Location", ev['link'], key=f"btn_{player}_{ev['time']}")
+                            # Using MD5 hash to create a unique, safe key for the button
+                            btn_id = hashlib.md5(f"{player}{ev['time']}{ev['text']}".encode()).hexdigest()
+                            st.link_button(f"📍 View Location", ev['link'], key=f"link_{btn_id}")
                         st.divider()
         else:
             st.download_button("💾 Download for iZurvive", st.session_state.filtered_result, "MAP_READY.adm")
