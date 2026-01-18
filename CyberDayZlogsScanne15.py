@@ -7,7 +7,7 @@ import streamlit.components.v1 as components
 # 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. CSS for Independent Scrolling & Layout
+# 2. CSS for Layout and Death Highlighting
 st.markdown(
     """
     <style>
@@ -15,7 +15,18 @@ st.markdown(
     header {visibility: hidden;}
     footer {visibility: hidden;}
     .block-container { padding-top: 0rem !important; padding-bottom: 0rem !important; max-width: 100%; }
+    
+    /* Death Highlight Styling */
+    .death-log {
+        color: #ff4b4b;
+        font-weight: bold;
+        border-left: 3px solid #ff4b4b;
+        padding-left: 10px;
+        margin: 5px 0;
+    }
+
     [data-testid='stMarkdownContainer'] h4 { margin-top: -15px !important; margin-bottom: 10px !important; }
+    
     @media (min-width: 768px) {
         .main { overflow: hidden; }
         [data-testid='stHorizontalBlock'] { height: 98vh; margin-top: -20px; }
@@ -29,6 +40,7 @@ st.markdown(
 # 3. Helper Functions
 def make_izurvive_link(coords):
     if coords:
+        # X=0, Y=1 (Engine coordinates for inland plotting)
         return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
     return None
 
@@ -41,7 +53,6 @@ def extract_player_and_coords(line):
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             parts = [p.strip() for p in raw.split(",")]
-            # X=0, Y=1 (as requested for inland positioning)
             coords = [float(parts[0]), float(parts[1])]
     except:
         pass 
@@ -58,7 +69,7 @@ def filter_logs(files, main_choice):
         content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
         all_lines.extend(content.splitlines())
 
-    session_keys = ["is connected", "has been disconnected", "is connecting", "connected", "died", "killed"]
+    session_keys = ["is connected", "has been disconnected", "is connecting", "connected", "died", "killed", "bled out", "suicide"]
 
     for line in all_lines:
         if "|" not in line: continue
@@ -73,10 +84,13 @@ def filter_logs(files, main_choice):
                 current_name, _ = extract_player_and_coords(line)
                 last_pos = player_positions.get(current_name)
                 
+                is_death = any(d in low for d in ["died", "killed", "suicide", "bled out"])
+                
                 event_entry = {
                     "time": line.split(" | ")[0] if " | " in line else "00:00:00",
                     "text": line.strip(),
-                    "link": make_izurvive_link(last_pos)
+                    "link": make_izurvive_link(last_pos),
+                    "is_death": is_death
                 }
                 
                 if current_name not in grouped_report:
@@ -108,11 +122,7 @@ with col1:
 
     if st.session_state.filtered_result:
         if mode == "Session Tracking (Global)":
-            # --- NEW SEARCH FEATURE ---
             search_query = st.text_input("🔍 Search Player Name", "").lower()
-            
-            st.info(f"📊 {len(st.session_state.grouped_report)} Players Found")
-            
             sorted_players = sorted(st.session_state.grouped_report.keys())
             
             for player in sorted_players:
@@ -123,9 +133,15 @@ with col1:
                 with st.expander(f"👤 {player} ({len(events)} events)"):
                     for ev in events:
                         st.caption(f"🕒 {ev['time']}")
-                        st.code(ev['text'])
+                        
+                        # Apply Death Highlight if applicable
+                        if ev['is_death']:
+                            st.markdown(f"<div class='death-log'>{ev['text']}</div>", unsafe_allow_html=True)
+                        else:
+                            st.code(ev['text'])
+                        
+                        # FIXED: Only show button if a valid link exists
                         if ev['link']:
-                            # Using MD5 hash to create a unique, safe key for the button
                             btn_id = hashlib.md5(f"{player}{ev['time']}{ev['text']}".encode()).hexdigest()
                             st.link_button(f"📍 View Location", ev['link'], key=f"link_{btn_id}")
                         st.divider()
