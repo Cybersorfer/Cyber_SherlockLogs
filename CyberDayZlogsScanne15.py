@@ -6,14 +6,23 @@ import streamlit.components.v1 as components
 # Setup Page Config - Set to "wide" to fit the map and scanner side-by-side
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# Custom CSS to make the right column (map) stay in place (floating)
+# Custom CSS to fix the position of the map column (Zone 2)
 st.markdown(
     """
     <style>
-    [data-testid="column"]:nth-child(2) [data-testid="stVerticalBlock"] {
+    /* This targets the second column specifically */
+    [data-testid="column"]:nth-child(2) {
         position: fixed;
-        width: 58%;
-        height: 100vh;
+        right: 2%;
+        top: 80px;
+        width: 55%;
+        height: 90vh;
+        overflow: hidden;
+    }
+    
+    /* Adjusts the main container to ensure the left side scrolls freely */
+    .main .block-container {
+        padding-top: 2rem;
     }
     </style>
     """,
@@ -67,8 +76,8 @@ def filter_logs(files, main_choice, target_player=None, sub_choice=None):
 # --- WEB UI ---
 st.title("🛡️ CyberDayZ Log Scanner & Map Viewer")
 
-# Create two columns: Left for Scanner, Right for iZurvive Map
-col1, col2 = st.columns([1, 1.5])
+# Create two columns: Left for Scanner (1), Right for iZurvive Map (2)
+col1, col2 = st.columns([1, 1.3])
 
 with col1:
     st.header("1. Filter Logs")
@@ -100,10 +109,10 @@ with col1:
         if st.button("Process Logs"):
             result = filter_logs(uploaded_files, mode, target_player, sub_choice)
             
-            st.success("Filtered!")
+            st.success("Log Filtering Complete!")
             
-            # Updated Instructions
-            st.warning("Next: Download the file below and upload the new filtered ADM file on the iZurvive map to the right.")
+            # Updated Instructions per your request
+            st.info("💡 **Next Step:** Download the file below and upload the new filtered ADM file on the iZurvive map to the right.")
             
             st.download_button(
                 label="💾 Download Filtered File",
@@ -112,11 +121,11 @@ with col1:
                 mime="text/plain"
             )
             
-            st.text_area("Filtered Preview", result, height=300)
+            st.text_area("Filtered Text Preview", result, height=500)
 
 with col2:
     st.header("2. iZurvive Map Viewer")
-    st.info("Instructions: Download the file from the left, then click 'Filter' -> 'Serverlogs' on the map below and upload the file.")
+    st.warning("Upload the new filtered ADM file on the iZurvive section below.")
     
-    # This embeds the iZurvive serverlogs page directly in your app
-    components.iframe("https://www.izurvive.com/serverlogs/", height=1000, scrolling=True)
+    # This embeds iZurvive. The CSS above makes this container stay static while scrolling.
+    components.iframe("https://www.izurvive.com/serverlogs/", height=900, scrolling=True)
