@@ -5,25 +5,38 @@ import streamlit.components.v1 as components
 # 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# 2. Custom CSS to fix the right column position (Zone 2)
+# 2. Advanced CSS for Independent Scrolling Columns
 st.markdown(
     """
     <style>
-    /* Fix the right column (the map) so it stays pinned while left side scrolls */
-    @media (min-width: 768px) {
-        [data-testid="column"]:nth-child(2) {
-            position: fixed;
-            right: 20px;
-            top: 50px;
-            width: 55%;
-            height: 90vh;
-            z-index: 100;
-        }
+    /* Force the main container to fill the screen and disable global scroll */
+    .main .block-container {
+        max-width: 100%;
+        padding-top: 2rem;
+        padding-bottom: 0rem;
+        height: 100vh;
+        overflow: hidden;
     }
-    
-    /* Give the overall page a cleaner look */
-    .main {
-        background-color: #0e1117;
+
+    /* Target the column container */
+    [data-testid="stHorizontalBlock"] {
+        height: 85vh;
+    }
+
+    /* Make each column an independent scrollable box */
+    [data-testid="column"] {
+        height: 100% !important;
+        overflow-y: auto !important;
+        padding-right: 15px;
+    }
+
+    /* Style the scrollbar for a cleaner look */
+    [data-testid="column"]::-webkit-scrollbar {
+        width: 6px;
+    }
+    [data-testid="column"]::-webkit-scrollbar-thumb {
+        background-color: #4b4b4b;
+        border-radius: 10px;
     }
     </style>
     """,
@@ -33,6 +46,8 @@ st.markdown(
 # 3. Initialize Session State
 if "filtered_result" not in st.session_state:
     st.session_state.filtered_result = None
+if "map_version" not in st.session_state:
+    st.session_state.map_version = 0
 
 def filter_logs(files, main_choice, target_player=None, sub_choice=None):
     all_lines = []
@@ -62,8 +77,6 @@ def filter_logs(files, main_choice, target_player=None, sub_choice=None):
                 elif sub_choice == "Movement + Raid Watch":
                     if ("pos=" in low or any(k in low for k in raid_keys)) and "built" not in low:
                         final_output.append(line)
-                elif sub_choice == "Session Tracking" and any(k in low for k in session_keys):
-                    final_output.append(line)
 
     elif main_choice == "All Death Locations":
         final_output = [l for l in all_lines if any(x in l.lower() for x in ["killed", "died", "suicide", "bled out"])]
@@ -78,18 +91,18 @@ def filter_logs(files, main_choice, target_player=None, sub_choice=None):
     return header + "".join(final_output)
 
 # --- WEB UI ---
-st.title("🛡️ CyberDayZ Scanner")
+st.title("🛡️ CyberDayZ Log Scanner V3")
 
 # Create two columns
-col1, col2 = st.columns([1, 1.4])
+col1, col2 = st.columns([1, 1.3])
 
-# LEFT COLUMN: Filter Logic
+# LEFT COLUMN: Filter Logic (Independent Scroll)
 with col1:
-    st.subheader("1. Filter Logs")
-    uploaded_files = st.file_uploader("Upload .ADM Files", type=['adm', 'rpt'], accept_multiple_files=True)
+    st.subheader("1. Filter Settings")
+    uploaded_files = st.file_uploader("Upload .ADM or .RPT Files", type=['adm', 'rpt'], accept_multiple_files=True)
 
     if uploaded_files:
-        mode = st.selectbox("Filter Mode", [
+        mode = st.selectbox("Select Filter", [
             "Activity per Specific Player", 
             "All Death Locations", 
             "All Placements", 
@@ -105,27 +118,31 @@ with col1:
             for f in uploaded_files:
                 temp_all.extend(f.getvalue().decode("utf-8", errors="ignore").splitlines())
             player_list = sorted(list(set(line.split('"')[1] for line in temp_all if 'Player "' in line)))
-            target_player = st.selectbox("Select Player", player_list)
+            target_player = st.selectbox("Target Player", player_list)
             sub_choice = st.radio("Detail", ["Full History", "Movement Only", "Movement + Building", "Movement + Raid Watch"])
 
         if st.button("🚀 Process Logs"):
             st.session_state.filtered_result = filter_logs(uploaded_files, mode, target_player, sub_choice)
 
-    # Persistent Output (Doesn't disappear when you scroll or interact)
     if st.session_state.filtered_result:
-        st.success("Filtered!")
-        st.download_button(
-            label="💾 Download Filtered ADM",
-            data=st.session_state.filtered_result,
-            file_name="FILTERED_LOGS.adm",
-            mime="text/plain"
-        )
-        st.text_area("Filtered Logs Preview", st.session_state.filtered_result, height=600)
+        st.success("Filtered Logs Ready!")
+        st.download_button(label="💾 Download for iZurvive", data=st.session_state.filtered_result, file_name="FOR_MAP.adm")
+        st.text_area("Preview (Scrollable)", st.session_state.filtered_result, height=800)
 
-# RIGHT COLUMN: Floating Map Viewer
+# RIGHT COLUMN: iZurvive Map (Independent Scroll + Refresh)
 with col2:
     st.subheader("2. iZurvive Map")
-    st.info("Download the file on the left, then upload it into 'Serverlogs' here.")
     
-    # iframe without the 'key' argument to prevent the TypeError
-    components.iframe("https://www.izurvive.com/serverlogs/", height=800, scrolling=True)
+    # Independent Refresh Button
+    if st.button("🔄 Refresh Map Window"):
+        st.session_state.map_version += 1
+    
+    st.info("Download file from left, then click 'Filter' -> 'Serverlogs' here.")
+    
+    # Map component with versioning key to allow refresh
+    components.iframe(
+        f"https://www.izurvive.com/serverlogs/", 
+        height=1200, 
+        scrolling=True,
+        key=f"map_v_{st.session_state.map_version}"
+    )
