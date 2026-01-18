@@ -1,94 +1,167 @@
 import streamlit as st
 import io
-import math
 import streamlit.components.v1 as components
 
+# 1. Setup Page Config
 st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide")
 
-# Fixed CSS Block
+# 2. Tightened CSS: Fixes overlap and pushes content to the absolute top
 st.markdown(
     """
     <style>
-    #MainMenu {visibility: hidden;} 
-    header {visibility: hidden;} 
+    /* Hide default Streamlit elements */
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
     footer {visibility: hidden;}
-    .block-container { padding-top: 0rem !important; padding-bottom: 0rem !important; max-width: 100%; }
-    [data-testid='stMarkdownContainer'] h4 { margin-top: -25px !important; margin-bottom: 5px !important; }
+    
+    /* Remove padding from the main container */
+    .block-container {
+        padding-top: 0rem !important;
+        padding-bottom: 0rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        max-width: 100%;
+    }
+
+    /* Fixed alignment for the title and columns */
+    [data-testid="stMarkdownContainer"] h4 {
+        margin-top: -15px !important; /* Pull the main logo/title higher */
+        margin-bottom: 10px !important;
+    }
+
+    /* DESKTOP VIEW: Independent Columns */
     @media (min-width: 768px) {
-        .main { overflow: hidden; }
-        [data-testid='stHorizontalBlock'] { height: 98vh; margin-top: -25px; }
-        [data-testid='column'] { height: 100% !important; overflow-y: auto !important; padding-top: 15px; border: 1px solid #31333F; border-radius: 8px; }
+        .main {
+            overflow: hidden;
+        }
+        [data-testid="stHorizontalBlock"] {
+            height: 98vh;
+            margin-top: -20px; /* Pulls columns up to meet the title */
+        }
+        [data-testid="column"] {
+            height: 100% !important;
+            overflow-y: auto !important;
+            padding-top: 15px; /* Adds space inside the border so text doesn't touch the top */
+            border: 1px solid #31333F;
+            border-radius: 8px;
+        }
+    }
+
+    /* MOBILE VIEW: Individual scroll zones */
+    @media (max-width: 767px) {
+        [data-testid="column"] {
+            height: 450px !important;
+            overflow-y: scroll !important;
+            border: 1px solid #31333F;
+            margin-bottom: 10px;
+        }
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+    }
+    ::-webkit-scrollbar-thumb {
+        background-color: #4b4b4b;
+        border-radius: 10px;
     }
     </style>
-    """, 
+    """,
     unsafe_allow_html=True
 )
 
-# Geodata with your requested locations
-CHERNARUS_LOCATIONS = {
-    "NW Airfield (NWAF)": (13470, 13075),
-    "Severograd": (11000, 12400),
-    "Zelenogorsk": (2700, 5200),
-    "Stary Sobor": (6100, 7600),
-    "Novy Sobor": (7000, 7600),
-    "Gorka": (9500, 6500),
-    "Vybor": (3800, 8900),
-    "Tisy Military Base": (11500, 14200),
-    "Berezino": (12900, 9200),
-    "Chernogorsk": (6700, 2500),
-    "Elektrozavodsk": (10300, 2300),
-}
+# 3. Initialize Session State
+if "filtered_result" not in st.session_state:
+    st.session_state.filtered_result = None
+if "map_version" not in st.session_state:
+    st.session_state.map_version = 0
 
-def extract_coords(line):
-    try:
-        if "pos=<" in line:
-            raw = line.split("pos=<")[1].split(">")[0]
-            parts = [float(p.strip()) for p in raw.split(",")]
-            # DayZ logs are X, Height, Y. We return [X, Y]
-            return [parts[0], parts[2]]
-    except:
-        return None
-    return None
+def filter_logs(files, main_choice, target_player=None, sub_choice=None):
+    all_lines = []
+    header = "******************************************************************************\n"
+    header += "AdminLog started on Web_Filter_Session\n"
 
-def filter_logs(files, town_choice, radius):
-    final_output = []
-    header = "AdminLog started on 00:00:00\n***********************\n"
-    target_x, target_y = CHERNARUS_LOCATIONS[town_choice]
-    
     for uploaded_file in files:
-        content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
-        for line in content.splitlines():
-            if "pos=<" in line:
-                line_pos = extract_coords(line)
-                if line_pos:
-                    dist = math.sqrt((line_pos[0] - target_x)**2 + (line_pos[1] - target_y)**2)
-                    if dist <= radius:
-                        final_output.append(line)
-    return header + "\n".join(final_output)
+        stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8", errors="ignore"))
+        for line in stringio:
+            if "|" in line and ":" in line:
+                all_lines.append(line)
 
-# UI Logic
+    final_output = []
+    placement_keys = ["placed", "built", "folded", "shelterfabric", "mounted"]
+    session_keys = ["connected", "disconnected", "lost connection", "choosing to respawn"]
+    raid_keys = ["dismantled", "unmount", "packed", "barbedwirehit", "fireplace", "gardenplot", "fence kit"]
+
+    if main_choice == "Activity per Specific Player" and target_player:
+        for line in all_lines:
+            low = line.lower()
+            if target_player in line:
+                if sub_choice == "Full History": final_output.append(line)
+                elif sub_choice == "Movement Only" and "pos=" in low: final_output.append(line)
+                elif sub_choice == "Movement + Building":
+                    if ("pos=" in low or any(k in low for k in placement_keys)) and "hit" not in low:
+                        final_output.append(line)
+                elif sub_choice == "Movement + Raid Watch":
+                    if ("pos=" in low or any(k in low for k in raid_keys)) and "built" not in low:
+                        final_output.append(line)
+
+    elif main_choice == "All Death Locations":
+        final_output = [l for l in all_lines if any(x in l.lower() for x in ["killed", "died", "suicide", "bled out"])]
+    elif main_choice == "All Placements":
+        final_output = [l for l in all_lines if any(x in l.lower() for x in placement_keys)]
+    elif main_choice == "Session Tracking (Global)":
+        final_output = [l for l in all_lines if any(x in l.lower() for x in session_keys)]
+    elif main_choice == "RAID WATCH (Global)":
+        final_output = [l for l in all_lines if any(x in l.lower() for x in raid_keys) and "built" not in l.lower()]
+
+    final_output.sort()
+    return header + "".join(final_output)
+
+# --- WEB UI ---
+# The main logo/title - CSS pulls this to the top
 st.markdown("#### 🛡️ CyberDayZ Scanner")
+
 col1, col2 = st.columns([1, 2.5])
 
 with col1:
+    # Adding a small space to ensure "1. Filter Logs" doesn't touch the top border
+    st.write("") 
     st.write("**1. Filter Logs**")
-    uploaded_files = st.file_uploader("Upload .ADM Files", accept_multiple_files=True)
-    selected_town = st.selectbox("Select Town:", list(CHERNARUS_LOCATIONS.keys()))
-    search_radius = st.slider("Search Radius (meters):", 100, 5000, 1000)
-    
-    if st.button("🚀 Process"):
-        if uploaded_files:
-            res = filter_logs(uploaded_files, selected_town, search_radius)
-            st.session_state.filter_res = res
-            st.success(f"Found {len(res.splitlines()) - 2} events!")
-        else:
-            st.error("Upload files first.")
+    uploaded_files = st.file_uploader("Upload .ADM", type=['adm', 'rpt'], accept_multiple_files=True)
 
-    if "filter_res" in st.session_state and st.session_state.filter_res:
-        st.download_button("💾 Download for iZurvive", st.session_state.filter_res, "MAP_READY.adm")
+    if uploaded_files:
+        mode = st.selectbox("Select Filter", [
+            "Activity per Specific Player", "All Death Locations", 
+            "All Placements", "Session Tracking (Global)", "RAID WATCH (Global)"
+        ])
+
+        target_player = None
+        sub_choice = None
+
+        if mode == "Activity per Specific Player":
+            temp_all = []
+            for f in uploaded_files:
+                temp_all.extend(f.getvalue().decode("utf-8", errors="ignore").splitlines())
+            player_list = sorted(list(set(line.split('"')[1] for line in temp_all if 'Player "' in line)))
+            target_player = st.selectbox("Select Player", player_list)
+            sub_choice = st.radio("Detail", ["Full History", "Movement Only", "Movement + Building", "Movement + Raid Watch"])
+
+        if st.button("🚀 Process"):
+            st.session_state.filtered_result = filter_logs(uploaded_files, mode, target_player, sub_choice)
+
+    if st.session_state.filtered_result:
+        st.download_button(label="💾 Download ADM", data=st.session_state.filtered_result, file_name="FOR_MAP.adm")
 
 with col2:
-    if st.button("🔄 Refresh Map"):
-        st.session_state.map_v = st.session_state.get('map_v', 0) + 1
-    map_url = f"https://www.izurvive.com/serverlogs/?v={st.session_state.get('map_v', 0)}"
-    components.iframe(map_url, height=1000, scrolling=True)
+    # Layout row for the map header and refresh button
+    c1, c2 = st.columns([3, 1])
+    with c1: 
+        st.write("") 
+        st.write("**2. iZurvive Map**")
+    with c2: 
+        if st.button("🔄 Refresh"):
+            st.session_state.map_version += 1
+    
+    # Map with dynamic versioning to avoid refresh errors
+    map_url = f"https://www.izurvive.com/serverlogs/?v={st.session_state.map_version}"
+    components.iframe(map_url, height=1100, scrolling=True)
