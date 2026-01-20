@@ -11,37 +11,51 @@ import streamlit.components.v1 as components
 # ==============================================================================
 # SECTION 1: GLOBAL PAGE SETUP & THEMING (CSS)
 # ==============================================================================
-st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="CyberDayZ Log Scanner", layout="wide", initial_sidebar_state="collapsed")
 
-st.markdown("""
+st.markdown(
+    """
     <style>
-    .stApp { background-color: #0e1117; color: #ffffff !important; }
-    label, p, span, .stMarkdown, .stCaption { color: #ffffff !important; font-weight: 500 !important; }
+    .stApp { background-color: #0e1117; color: #fafafa; }
+    #MainMenu, header, footer { visibility: hidden; }
     
-    /* SIDEBAR THEME */
+    /* Global Button & Link Styling */
+    div.stButton > button, div.stLinkButton > a {
+        background-color: #262730 !important;
+        color: #ffffff !important;
+        border: 1px solid #4b4b4b !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1rem !important;
+        width: 100%;
+    }
+    
+    /* High-Contrast Sidebar (Nitrado Area) */
     section[data-testid="stSidebar"] {
         background-color: #1c2128 !important;
         border-right: 2px solid #30363d;
     }
 
-    /* ACTION BUTTONS (GREEN THEME) */
-    .stFileUploader label [data-testid="stBaseButton-secondary"], 
-    div.stButton > button {
-        color: #ffffff !important;
-        background-color: #238636 !important; 
-        border: 1px solid #2ea043 !important;
-        font-weight: bold !important;
-        text-transform: uppercase;
-        width: 100% !important;
+    /* File Uploader Appearance */
+    [data-testid="stFileUploader"] {
+        background-color: #161b22;
+        border: 1px dashed #4b4b4b;
+        border-radius: 15px;
+        padding: 10px;
     }
-    
-    /* LOG RESULT STYLING */
-    .death-log { color: #ff4b4b !important; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; margin-bottom: 5px;}
-    .connect-log { color: #28a745 !important; border-left: 3px solid #28a745; padding-left: 10px; margin-bottom: 5px;}
-    .disconnect-log { color: #ffc107 !important; border-left: 3px solid #ffc107; padding-left: 10px; margin-bottom: 5px;}
-    </style>
-    """, unsafe_allow_html=True)
 
+    /* Responsive Column Handling */
+    @media (max-width: 768px) {
+        [data-testid="column"] { width: 100% !important; flex: 1 1 auto !important; }
+    }
+
+    /* Log Result Color Coding */
+    .death-log { color: #ff4b4b; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; }
+    .connect-log { color: #28a745; border-left: 3px solid #28a745; padding-left: 10px; }
+    .disconnect-log { color: #ffc107; border-left: 3px solid #ffc107; padding-left: 10px; }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 # ==============================================================================
 # SECTION 2: 🐺 NITRADO FTP MANAGER (LOCKED LOGIC)
@@ -79,78 +93,68 @@ def fetch_ftp_logs(f_days=None, s_dt=None, e_dt=None, s_h=0, e_h=23):
         st.session_state.all_logs = sorted(processed_files, key=lambda x: x['time'], reverse=True)
         ftp.quit()
 
+# ==============================================================================
+# SECTION 3: 🛠️ ADVANCED LOG FILTERING (CORE BACKEND)
+# ==============================================================================
 
-# ==============================================================================
-# SECTION 3: 🛠️ ADVANCED LOG FILTERING (V14-11 CORE LOGIC)
-# ==============================================================================
-def extract_v14_data(line):
-    name, coords = "System", None
+def make_izurvive_link(coords):
+    if coords and len(coords) >= 2:
+        return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
+    return ""
+
+def extract_player_and_coords(line):
+    name, coords = "System/Server", None
     try:
-        if 'Player "' in line: name = line.split('Player "')[1].split('"')[0]
+        if 'Player "' in line: 
+            name = line.split('Player "')[1].split('"')[0]
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
-            pts = [p.strip() for p in raw.split(",")]
-            # Horizontal Plane Distance: X (pts[0]) and Z (pts[2])
-            coords = [float(pts[0]), float(pts[2])] 
-    except: pass
-    return name, coords
+            parts = [p.strip() for p in raw.split(",")]
+            coords = [float(parts[0]), float(parts[1])] 
+    except: pass 
+    return str(name), coords
 
-def filter_v14_9_exact(files, mode, target_p=None, area_c=None, area_r=500):
-    report, raw_lines = {}, []
-    all_content, first_ts = [], "00:00:00"
-    
-    for f in files:
-        f.seek(0)
-        content = f.read().decode("utf-8", errors="ignore")
-        all_content.extend(content.splitlines())
-        if first_ts == "00:00:00":
-            t_match = re.search(r'(\d{2}:\d{2}:\d{2})', content)
-            if t_match: first_ts = t_match.group(1)
+def calculate_distance(p1, p2):
+    if not p1 or not p2: return 999999
+    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
-    header = f"******************************************************************************\nAdminLog started on {datetime.now().strftime('%Y-%m-%d')} at {first_ts}\n\n"
+def filter_logs(files, mode, target_player=None, area_coords=None, area_radius=500):
+    grouped_report, player_positions, boosting_tracker = {}, {}, {}
+    raw_filtered_lines = []
+    header = "******************************************************************************\nAdminLog started on 2026-01-19 at 08:43:52\n\n"
 
-    # Keywords strictly from v14 (11)
-    build_k = ["placed", "built", "built base", "built wall", "built gate", "built platform"]
-    raid_k = ["dismantled", "folded", "unmount", "unmounted", "packed"]
-    sess_k = ["connected", "disconnected", "died", "killed"]
-    boost_obj = ["fence kit", "nameless object", "fireplace", "garden plot"]
-    
+    all_lines = []
+    for uploaded_file in files:
+        uploaded_file.seek(0)
+        content = uploaded_file.read().decode("utf-8", errors="ignore")
+        all_lines.extend(content.splitlines())
 
-    for line in all_content:
+    building_keys = ["placed", "built", "built base", "built wall", "built gate", "built platform"]
+    raid_keys = ["dismantled", "folded", "unmount", "unmounted", "packed"]
+    session_keys = ["connected", "disconnected", "died", "killed"]
+    boosting_objects = ["fence kit", "nameless object", "fireplace", "garden plot", "barrel"]
+
+    for line in all_lines:
         if "|" not in line: continue
-        
         time_part = line.split(" | ")[0]
         clean_time = time_part.split("]")[-1].strip() if "]" in time_part else time_part.strip()
-        
         name, coords = extract_player_and_coords(line)
         if name != "System/Server" and coords: player_positions[name] = coords
-
         low = line.lower()
         should_process = False
 
-# Mode A: Single Player Activity
         if mode == "Full Activity per Player":
             if target_player == name: should_process = True
-            
-        # Mode B: Building Events
         elif mode == "Building Only (Global)":
             if any(k in low for k in building_keys) and "pos=" in low: should_process = True
-            
-        # Mode C: Dismantling/Raiding events
         elif mode == "Raid Watch (Global)":
             if any(k in low for k in raid_keys) and "pos=" in low: should_process = True
-            
-        # Mode D: Logins, Logouts, and Combat Deaths
         elif mode == "Session Tracking (Global)":
             if any(k in low for k in session_keys): should_process = True
-            
-        # Mode E: Search activity within map coordinates
         elif mode == "Area Activity Search":
             if coords and area_coords:
                 dist = calculate_distance(coords, area_coords)
                 if dist <= area_radius: should_process = True
-                
-        # Mode F: Analyze build frequency within small area to find boosting
         elif mode == "Suspicious Boosting Activity":
             try: current_time = datetime.strptime(clean_time, "%H:%M:%S")
             except: continue
@@ -169,7 +173,6 @@ def filter_v14_9_exact(files, mode, target_p=None, area_c=None, area_r=500):
             status = "normal"
             if any(d in low for d in ["died", "killed"]): status = "death"
             elif "connect" in low: status = "connect"
-            
             event_entry = {"time": clean_time, "text": str(line.strip()), "link": link, "status": status}
             if name not in grouped_report: grouped_report[name] = []
             grouped_report[name].append(event_entry)
@@ -179,9 +182,12 @@ def filter_v14_9_exact(files, mode, target_p=None, area_c=None, area_r=500):
 # ==============================================================================
 # SECTION 4: USER INTERFACE (SIDEBAR & COLUMNS)
 # ==============================================================================
-c_left, c_right = st.columns([1, 1.4])
 
-# --- SUB-SECTION: 🐺 Nitrado FTP Manager UI ---
+# --- UI ELEMENT: Initialization ---
+if "track_data" not in st.session_state: st.session_state.track_data = {}
+if "raw_download" not in st.session_state: st.session_state.raw_download = ""
+
+# --- UI ELEMENT: NITRADO FTP MANAGER (SIDEBAR) ---
 with st.sidebar:
     st.header("🐺 Nitrado FTP Manager")
     t_mode = st.radio("Time Frame:", ["Quick Select", "Search by Date/Hour"])
@@ -218,29 +224,28 @@ with st.sidebar:
                         buf = io.BytesIO(); ftp.retrbinary(f"RETR {real_name}", buf.write); zf.writestr(real_name, buf.getvalue())
                 ftp.quit(); st.download_button("💾 DOWNLOAD ZIP", zip_buffer.getvalue(), "dayz_logs.zip")
 
-# --- SUB-SECTION: 🛠️ Advanced Log Filtering UI ---
-    with c_left:
-    st.markdown("### 🛠️ Advanced Log Filtering")
+# --- UI ELEMENT: DASHBOARD COLUMNS (Filtering & Map) ---
+st.markdown("#### 🛡️ CyberDayZ Scanner v26.6")
+col1, col2 = st.columns([1, 2.3])
+
+# UI ELEMENT: 🛠️ ADVANCED LOG FILTERING (LEFT PANEL)
+with col1:
     uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
     
     if uploaded_files:
         mode = st.selectbox("Select Filter", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity", "Area Activity Search"])
         
-        target_player = None
-        area_coords = None
-        area_radius = 500
+        target_player, area_coords, area_radius = None, None, 500
         
-        # UI Logic: Player Dropdown
         if mode == "Full Activity per Player":
             all_names = []
             for f in uploaded_files:
                 f.seek(0)
-                content = f.read().decode("utf-8", errors=\"ignore\")
+                content = f.read().decode("utf-8", errors="ignore")
                 all_names.extend([line.split('"')[1] for line in content.splitlines() if 'Player "' in line])
             player_list = sorted(list(set(all_names)))
             target_player = st.selectbox("Select Player", player_list)
             
-        # UI Logic: Map Landmark Dropdown
         elif mode == "Area Activity Search":
             presets = {
                 "Custom Coordinates": None,
@@ -263,15 +268,13 @@ with st.sidebar:
                 
             area_radius = st.slider("Search Radius (Meters)", 50, 2000, 500)
 
-        # Action: Run Filter logic
         if st.button("🚀 Process Logs"):
             report, raw_file = filter_logs(uploaded_files, mode, target_player, area_coords, area_radius)
             st.session_state.track_data = report
             st.session_state.raw_download = raw_file
 
-    # --- SUB-SECTION: RESULTS DISPLAY ---
     if st.session_state.track_data:
-        st.download_button("💾 Download ADM", data=st.session_state.raw_download, file_name="CYBERSHERLOCK_LOGS.adm")
+        st.download_button("💾 Download ADM", data=st.session_state.raw_download, file_name="CYBER_LOGS.adm")
         for p in sorted(st.session_state.track_data.keys()):
             with st.expander(f"👤 {p}"):
                 for ev in st.session_state.track_data[p]:
@@ -280,12 +283,8 @@ with st.sidebar:
                     if ev['link']: st.link_button("📍 Map", ev['link'])
                     st.divider()
 
-
-# --- SUB-SECTION: 📍 iZurvive Map UI ---
-with c_right:
-    st.markdown("### 📍 iZurvive Map")
-    if st.button("🔄 REFRESH MAP"): 
-        st.session_state.mv = st.session_state.get('mv', 0) + 1
-    
-    # iZurvive Frame
-    components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.get('mv', 0)}", height=850, scrolling=True)
+# UI ELEMENT: 📍 iZurvive Map (RIGHT PANEL)
+with col2:
+    if st.button("🔄 Refresh Map"): st.session_state.mv = st.session_state.get('mv', 0) + 1
+    m_url = f"https://www.izurvive.com/serverlogs/?v={st.session_state.get('mv', 0)}"
+    components.iframe(m_url, height=800, scrolling=True)
