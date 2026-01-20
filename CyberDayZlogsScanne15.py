@@ -21,7 +21,6 @@ def get_log_list():
         response = requests.get(f"{BASE_URL}/list", headers=headers, params=params)
         response.raise_for_status()
         files = response.json().get('data', {}).get('entries', [])
-        # Filtering for logs only
         logs = [f for f in files if f['name'].endswith(('.ADM', '.RPT'))]
         return sorted(logs, key=lambda x: x['name'], reverse=True)
     except Exception as e:
@@ -58,10 +57,16 @@ def parse_adm_data(content):
 # --- USER INTERFACE ---
 
 st.title("🐺 CyberDayZ Log Scanner v27.9")
-st.sidebar.success("✅ Token & Service ID Loaded")
+
+# Player Search Bar in Sidebar
+st.sidebar.header("Filters")
+search_query = st.sidebar.text_input("🔍 Search Player Name", "").strip()
+
+st.sidebar.divider()
+st.sidebar.success("✅ Connected to Nitrado")
 st.markdown(f"**Target Path:** `{REMOTE_PATH}` | **Service ID:** `{SERVICE_ID}`")
 
-# Auto-load logs on startup
+# Auto-load logs
 logs = get_log_list()
 
 if logs:
@@ -77,19 +82,27 @@ if logs:
                     df = parse_adm_data(raw_text)
                     
                     if not df.empty:
+                        # Apply Search Filter
+                        if search_query:
+                            df = df[df['Player'].str.contains(search_query, case=False)]
+                        
                         st.subheader(f"Player Activity: {selected_log}")
+                        if search_query:
+                            st.caption(f"Showing results for: **{search_query}**")
+                            
                         st.dataframe(df, use_container_width=True)
                         
                         # Summary Metrics
-                        st.info(f"Unique players found: {df['Player'].nunique()}")
+                        col1, col2 = st.columns(2)
+                        col1.metric("Total Logs Found", len(df))
+                        col2.metric("Unique Players", df['Player'].nunique())
                         
                         # CSV Export for iZurvive
                         csv = df.to_csv(index=False).encode('utf-8')
-                        st.download_button("Download CSV for iZurvive", csv, "dayz_coords.csv", "text/csv")
+                        st.download_button("Download CSV for iZurvive", csv, f"dayz_coords_{selected_log}.csv", "text/csv")
                     else:
                         st.warning("No coordinate data found in this ADM file.")
                 else:
-                    # RPT preview
-                    st.text_area("RPT Log Content (Preview)", raw_text[:5000], height=300)
+                    st.text_area("RPT Log Content (Preview)", raw_text[:5000], height=400)
 else:
-    st.error("Could not find any logs. Double-check that your Token is active and the Service ID is correct.")
+    st.error("No logs found. Check your Token and Service ID.")
