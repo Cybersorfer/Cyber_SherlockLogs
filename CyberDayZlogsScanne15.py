@@ -55,28 +55,20 @@ def parse_adm_data(content):
 
 st.title("🐺 CyberDayZ Log Scanner v27.9")
 
-st.markdown("""
-    <style>
-        .stMultiSelect div div div div {
-            max-height: 400px;
-            overflow-y: auto;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
 # --- SIDEBAR: LOG MANAGER ---
 st.sidebar.header("Filter & Manage Logs")
 
 if 'all_logs' not in st.session_state:
     fetch_logs()
 
-# 1. File Type Selection
+# 1. FIXED LAYOUT: Horizontal Checkboxes
 st.sidebar.subheader("Show File Types:")
-show_adm = st.sidebar.checkbox("ADM", value=True)
-show_rpt = st.sidebar.checkbox("RPT", value=True)
-show_log = st.sidebar.checkbox("LOG", value=True)
+check_cols = st.sidebar.columns(3)
+with check_cols[0]: show_adm = st.checkbox("ADM", value=True)
+with check_cols[1]: show_rpt = st.checkbox("RPT", value=True)
+with check_cols[2]: show_log = st.checkbox("LOG", value=True)
 
-# 2. NEW FEATURE: Scan Files for Specific Player
+# 2. Player Filter Scan
 st.sidebar.divider()
 st.sidebar.subheader("Content Filter")
 player_to_find = st.sidebar.text_input("Only show files containing:", "cybersorfer").strip()
@@ -87,31 +79,26 @@ if show_adm: selected_types.append(".ADM")
 if show_rpt: selected_types.append(".RPT")
 if show_log: selected_types.append(".LOG")
 
-# Apply Filters
+# Apply Logic
 display_logs = [f for f in st.session_state.all_logs if f.upper().endswith(tuple(selected_types))]
 
 if filter_by_content and player_to_find:
     with st.sidebar.status("Scanning file contents..."):
         matched_logs = []
-        # Scanning the top 15 most recent for performance
-        for f in display_logs[:15]: 
+        for f in display_logs[:15]: # Scans top 15 for speed
             content = download_file(f)
             if content and player_to_find.lower() in content.decode('utf-8', errors='ignore').lower():
                 matched_logs.append(f)
         display_logs = matched_logs
 
-# 3. Selection Controls
+# 3. Control Buttons
 col1, col2 = st.sidebar.columns(2)
 if col1.button("Select All"):
     st.session_state.selected_list = display_logs
 if col2.button("Clear All"):
     st.session_state.selected_list = []
 
-if st.sidebar.button("🔄 Refresh List"):
-    fetch_logs()
-    st.rerun()
-
-# 4. Multiselect and BULK DOWNLOAD
+# 4. Multiselect and BULK DOWNLOAD ZIP
 selected_files = st.sidebar.multiselect(
     "Files for Download:", 
     options=display_logs,
@@ -119,24 +106,25 @@ selected_files = st.sidebar.multiselect(
 )
 
 if selected_files:
-    st.sidebar.subheader("Bulk Download")
-    if st.sidebar.button("📦 Bundle All Selected"):
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w") as zip_file:
-            for file_name in selected_files:
-                data = download_file(file_name)
-                if data:
-                    zip_file.writestr(file_name, data)
-        
-        st.sidebar.download_button(
-            label="💾 Click to Download All (.ZIP)",
-            data=zip_buffer.getvalue(),
-            file_name="dayz_logs_bundle.zip",
-            mime="application/zip"
-        )
+    st.sidebar.subheader("Bulk Operations")
+    # ZIP approach is the standard way to download multiple files at once in Streamlit
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+        for file_name in selected_files:
+            data = download_file(file_name)
+            if data:
+                zip_file.writestr(file_name, data)
+    
+    st.sidebar.download_button(
+        label=f"💾 Download {len(selected_files)} Files (ZIP)",
+        data=zip_buffer.getvalue(),
+        file_name="dayz_logs_bundle.zip",
+        mime="application/zip",
+        use_container_width=True
+    )
 
 st.sidebar.divider()
-search_query = st.sidebar.text_input("🔍 Table Search", "cybersorfer").strip()
+search_query = st.sidebar.text_input("🔍 Table Search", "").strip()
 
 # --- MAIN PAGE ---
 if display_logs:
@@ -150,6 +138,7 @@ if display_logs:
             if active_file.upper().endswith(".ADM"):
                 df = parse_adm_data(raw_text)
                 if not df.empty:
+                    # Table Search applied here
                     if search_query:
                         df = df[df['Player'].str.contains(search_query, case=False)]
                     st.success(f"Scanning: {active_file}")
