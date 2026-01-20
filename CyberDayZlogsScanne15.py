@@ -3,6 +3,7 @@ import pandas as pd
 import re
 from ftplib import FTP
 import io
+import zipfile
 
 # --- FTP CONFIGURATION ---
 FTP_HOST = "usla643.gamedata.io"
@@ -25,11 +26,9 @@ def get_ftp_connection():
         return None
 
 def fetch_logs():
-    """Retrieves all files from FTP and stores them in session state."""
     ftp = get_ftp_connection()
     if ftp:
         files = ftp.nlst()
-        # Grab all potential log files
         valid_extensions = ('.ADM', '.RPT', '.log')
         logs = [f for f in files if f.upper().endswith(valid_extensions)]
         ftp.quit()
@@ -56,7 +55,6 @@ def parse_adm_data(content):
 
 st.title("🐺 CyberDayZ Log Scanner v27.9")
 
-# CSS for scrollable menu
 st.markdown("""
     <style>
         .stMultiSelect div div div div {
@@ -72,57 +70,77 @@ st.sidebar.header("Filter & Manage Logs")
 if 'all_logs' not in st.session_state:
     fetch_logs()
 
-# 1. NEW FEATURE: File Type Selection Checkboxes
+# 1. File Type Selection
 st.sidebar.subheader("Show File Types:")
-show_adm = st.sidebar.checkbox("ADM (Coordinates)", value=True)
-show_rpt = st.sidebar.checkbox("RPT (Server Events)", value=True)
-show_log = st.sidebar.checkbox("LOG (General)", value=True)
+show_adm = st.sidebar.checkbox("ADM", value=True)
+show_rpt = st.sidebar.checkbox("RPT", value=True)
+show_log = st.sidebar.checkbox("LOG", value=True)
 
-# Filter the list based on checkboxes
+# 2. NEW FEATURE: Scan Files for Specific Player
+st.sidebar.divider()
+st.sidebar.subheader("Content Filter")
+player_to_find = st.sidebar.text_input("Only show files containing:", "cybersorfer").strip()
+filter_by_content = st.sidebar.checkbox("Filter List by Player Presence")
+
 selected_types = []
 if show_adm: selected_types.append(".ADM")
 if show_rpt: selected_types.append(".RPT")
 if show_log: selected_types.append(".LOG")
 
-filtered_logs = [f for f in st.session_state.all_logs if f.upper().endswith(tuple(selected_types))]
+# Apply Filters
+display_logs = [f for f in st.session_state.all_logs if f.upper().endswith(tuple(selected_types))]
 
-# 2. Control Buttons
+if filter_by_content and player_to_find:
+    with st.sidebar.status("Scanning file contents..."):
+        matched_logs = []
+        # Scanning the top 15 most recent for performance
+        for f in display_logs[:15]: 
+            content = download_file(f)
+            if content and player_to_find.lower() in content.decode('utf-8', errors='ignore').lower():
+                matched_logs.append(f)
+        display_logs = matched_logs
+
+# 3. Selection Controls
 col1, col2 = st.sidebar.columns(2)
 if col1.button("Select All"):
-    st.session_state.selected_list = filtered_logs
+    st.session_state.selected_list = display_logs
 if col2.button("Clear All"):
     st.session_state.selected_list = []
 
-if st.sidebar.button("🔄 Refresh Files"):
+if st.sidebar.button("🔄 Refresh List"):
     fetch_logs()
     st.rerun()
 
-# 3. Multiselect using the filtered list
+# 4. Multiselect and BULK DOWNLOAD
 selected_files = st.sidebar.multiselect(
     "Files for Download:", 
-    options=filtered_logs,
+    options=display_logs,
     default=st.session_state.get('selected_list', [])
 )
 
-# Individual Download Buttons
 if selected_files:
-    st.sidebar.subheader(f"Downloads ({len(selected_files)})")
-    for file_name in selected_files:
-        file_data = download_file(file_name)
-        if file_data:
-            st.sidebar.download_button(
-                label=f"📥 {file_name}",
-                data=file_data,
-                file_name=file_name,
-                key=f"btn_{file_name}"
-            )
+    st.sidebar.subheader("Bulk Download")
+    if st.sidebar.button("📦 Bundle All Selected"):
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as zip_file:
+            for file_name in selected_files:
+                data = download_file(file_name)
+                if data:
+                    zip_file.writestr(file_name, data)
+        
+        st.sidebar.download_button(
+            label="💾 Click to Download All (.ZIP)",
+            data=zip_buffer.getvalue(),
+            file_name="dayz_logs_bundle.zip",
+            mime="application/zip"
+        )
 
 st.sidebar.divider()
-search_query = st.sidebar.text_input("🔍 Player Search", "cybersorfer").strip()
+search_query = st.sidebar.text_input("🔍 Table Search", "cybersorfer").strip()
 
-# --- MAIN PAGE: ACTIVE SCAN ---
-if filtered_logs:
-    active_file = st.selectbox("Select file to scan/view:", filtered_logs)
+# --- MAIN PAGE ---
+if display_logs:
+    active_file = st.selectbox("Select file to scan/view:", display_logs)
     
     if st.button("Run Scan"):
         raw_data = download_file(active_file)
@@ -142,5 +160,3 @@ if filtered_logs:
                     st.warning("No coordinates found.")
             else:
                 st.text_area(f"Viewing: {active_file}", raw_text, height=500)
-else:
-    st.info("No files match your selected filters. Adjust checkboxes in the sidebar.")
