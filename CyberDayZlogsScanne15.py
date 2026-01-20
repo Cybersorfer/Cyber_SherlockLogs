@@ -17,7 +17,7 @@ st.markdown("""
     .stApp { background-color: #0e1117; color: #ffffff !important; }
     label, p, span, .stMarkdown, .stCaption { color: #ffffff !important; font-weight: 500 !important; }
     
-    /* SIDEBAR STYLING */
+    /* SIDEBAR STYLING (LOCKED NITRADO SECTION) */
     section[data-testid="stSidebar"] { background-color: #1c2128 !important; border-right: 2px solid #30363d; }
 
     /* ACTION BUTTONS: GREEN THEME */
@@ -31,7 +31,7 @@ st.markdown("""
         width: 100% !important;
     }
     
-    /* LOG COLORS SYNCED WITH v14 */
+    /* LOG COLORS SYNCED WITH v14-10 */
     .death-log { color: #ff4b4b !important; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; margin-bottom: 5px;}
     .connect-log { color: #28a745 !important; border-left: 3px solid #28a745; padding-left: 10px; margin-bottom: 5px;}
     .disconnect-log { color: #ffc107 !important; border-left: 3px solid #ffc107; padding-left: 10px; margin-bottom: 5px;}
@@ -71,20 +71,20 @@ def fetch_ftp_logs(filter_days=None, start_dt=None, end_dt=None, start_h=0, end_
         st.session_state.all_logs = sorted(processed_files, key=lambda x: x['time'], reverse=True)
         ftp.quit()
 
-# --- 4. [RESTORED] ADVANCED LOG FILTERING ---
-def extract_v14_data(line):
+# --- 4. [RESTORED] ADVANCED LOG FILTERING (EXACT SYNC v14-10) ---
+def extract_v14_10_data(line):
     name, coords = "System", None
     try:
         if 'Player "' in line: name = line.split('Player "')[1].split('"')[0]
         if "pos=<" in line:
             raw = line.split("pos=<")[1].split(">")[0]
             pts = [p.strip() for p in raw.split(",")]
-            # FIX: Use index 0 (X) and index 2 (Z) as per DayZ standard
+            # EXACT SYNC: Index 0 is X, Index 2 is Z (Horizontal Plane)
             coords = [float(pts[0]), float(pts[2])] 
     except: pass
     return name, coords
 
-def filter_v14_logic(files, mode, target_p=None, area_c=None, area_r=500):
+def filter_v14_10_logic(files, mode, target_p=None, area_c=None, area_r=500):
     report, raw_lines = {}, []
     all_content, first_ts = [], "00:00:00"
     
@@ -98,7 +98,7 @@ def filter_v14_logic(files, mode, target_p=None, area_c=None, area_r=500):
 
     header = f"******************************************************************************\nAdminLog started on {datetime.now().strftime('%Y-%m-%d')} at {first_ts}\n\n"
 
-    # Keywords strictly from your v14-10 logic
+    # EXACT KEYWORDS FROM YOUR FILE
     build_k = ["placed", "built", "built base", "built wall", "built gate", "built platform"]
     raid_k = ["dismantled", "folded", "unmount", "unmounted", "packed"]
     sess_k = ["connected", "disconnected", "died", "killed"]
@@ -107,17 +107,28 @@ def filter_v14_logic(files, mode, target_p=None, area_c=None, area_r=500):
 
     for line in all_content:
         if "|" not in line: continue
-        name, coords = extract_v14_data(line)
+        name, coords = extract_v14_10_data(line)
         low, match = line.lower(), False
         
         if mode == "Full Activity per Player": match = (target_p == name)
         elif mode == "Area Activity Search" and coords and area_c:
-            # Distance logic strictly using horizontal X/Z plane
+            # EXACT DISTANCE CALCULATION
             dist = math.sqrt((coords[0]-area_c[0])**2 + (coords[1]-area_c[1])**2)
-            match = (dist <= area_r)
+            if dist <= area_r: match = True
         elif mode == "Building Only (Global)": match = any(k in low for k in build_k) and "pos=" in low
         elif mode == "Raid Watch (Global)": match = any(k in low for k in raid_k) and "pos=" in low
         elif mode == "Session Tracking (Global)": match = any(k in low for k in sess_k)
+        elif mode == "Suspicious Boosting Activity" and any(k in low for k in ["placed", "built"]) and any(obj in low for obj in boost_obj):
+            t_str = line.split(" | ")[0][-8:]
+            try:
+                t_val = datetime.strptime(t_str, "%H:%M:%S")
+                if name not in boost_track: boost_track[name] = []
+                boost_track[name].append({"time": t_val, "pos": coords})
+                if len(boost_track[name]) >= 3:
+                    prev = boost_track[name][-3]
+                    if (t_val - prev["time"]).total_seconds() <= 300 and math.sqrt((coords[0]-prev["pos"][0])**2 + (coords[1]-prev["pos"][1])**2) < 15:
+                        match = True
+            except: continue
 
         if match:
             raw_lines.append(line.strip())
@@ -150,26 +161,34 @@ with col_l:
     st.markdown("### 🛠️ Advanced Log Filtering")
     uploaded = st.file_uploader("Browse Files", accept_multiple_files=True)
     if uploaded:
-        # Landmark list restored from v14-10
+        # EXACT LANDMARK LIST
         presets = {
             "NWAF": [4530, 10245], "Tisy Military": [1542, 13915], "Zenit": [8355, 5978], 
-            "Gorka": [9494, 8820], "VMC": [3824, 8912], "Zelenogorsk": [2540, 5085]
+            "Gorka": [9494, 8820], "VMC": [3824, 8912], "Zelenogorsk": [2540, 5085], "Custom Coordinates": None
         }
-        mode = st.selectbox("Select Filter", ["Area Activity Search", "Full Activity per Player", "Building Only (Global)", "Raid Watch (Global)"])
+        mode = st.selectbox("Select Filter", ["Area Activity Search", "Full Activity per Player", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity"])
         
         t_p, a_c, a_r = None, None, 500
         if mode == "Area Activity Search":
-            choice = st.selectbox("Quick Location", list(presets.keys()))
-            a_c, a_r = presets[choice], st.slider("Radius (Meters)", 50, 2000, 500)
+            selection = st.selectbox("Quick Location", list(presets.keys()))
+            if selection == "Custom Coordinates":
+                cx = st.number_input("Center X", value=4500.0)
+                cz = st.number_input("Center Z", value=10000.0)
+                a_c = [cx, cz]
+            else:
+                a_c = presets[selection]
+            a_r = st.slider("Radius (Meters)", 50, 2000, 500)
         elif mode == "Full Activity per Player":
-            p_list = set()
-            for f in uploaded: 
-                f.seek(0); p_list.update(re.findall(r'Player "([^"]+)"', f.read().decode("utf-8", errors="ignore")))
-            t_p = st.selectbox("Select Player", sorted(list(p_list)))
+            p_names = set()
+            for f in uploaded: f.seek(0); p_names.update(re.findall(r'Player "([^"]+)"', f.read().decode("utf-8", errors="ignore")))
+            t_p = st.selectbox("Select Player", sorted(list(p_names)))
 
         if st.button("🚀 Run Analysis"):
-            rep, raw = filter_v14_logic(uploaded, mode, t_p, a_c, a_r)
-            st.session_state.res_rep, st.session_state.res_raw = rep, raw
+            rep, raw = filter_v14_10_logic(uploaded, mode, t_p, a_c, a_r)
+            if rep:
+                st.session_state.res_rep, st.session_state.res_raw = rep, raw
+            else:
+                st.warning("No results found.")
 
     if "res_rep" in st.session_state and st.session_state.res_rep:
         st.download_button("💾 Download ADM", st.session_state.res_raw, "FILTERED.adm")
