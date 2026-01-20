@@ -15,7 +15,6 @@ st.set_page_config(page_title="CyberDayZ Scanner v27.9", layout="wide")
 # --- FUNCTIONS ---
 
 def get_ftp_connection():
-    """Establishes connection to Nitrado FTP."""
     try:
         ftp = FTP(FTP_HOST)
         ftp.login(user=FTP_USER, passwd=FTP_PASS)
@@ -26,7 +25,6 @@ def get_ftp_connection():
         return None
 
 def get_all_logs():
-    """Lists .ADM, .RPT, and .log files."""
     ftp = get_ftp_connection()
     if ftp:
         files = ftp.nlst()
@@ -37,7 +35,6 @@ def get_all_logs():
     return []
 
 def download_file(file_name):
-    """Downloads a single file's content from FTP."""
     ftp = get_ftp_connection()
     if ftp:
         buffer = io.BytesIO()
@@ -47,7 +44,6 @@ def download_file(file_name):
     return None
 
 def parse_adm_data(content):
-    """Parses coordinates for iZurvive."""
     pattern = r'(\d{2}:\d{2}:\d{2}).*?player\s"(.*?)"\s.*?pos=<([\d\.-]+),\s[\d\.-]+,\s([\d\.-]+)>'
     matches = re.findall(pattern, content)
     data = [{"Time": m[0], "Player": m[1], "X": float(m[2]), "Z": float(m[3])} for m in matches]
@@ -57,30 +53,38 @@ def parse_adm_data(content):
 
 st.title("🐺 CyberDayZ Log Scanner v27.9")
 
-# --- SIDEBAR: SCROLLABLE SELECTOR ---
-st.sidebar.header("Log File Manager")
-all_files = get_all_logs()
-
-# Using a standard multiselect with a height adjustment via CSS 
-# to ensure it expands or scrolls properly
+# CSS FIX: Corrected the parameter name to 'unsafe_allow_html'
 st.markdown("""
     <style>
         .stMultiSelect div div div div {
-            max-height: 300px;
+            max-height: 400px;
             overflow-y: auto;
         }
     </style>
-""", unsafe_allow_all_html=True)
+""", unsafe_allow_html=True)
 
-selected_files = st.sidebar.multiselect(
-    "Select files to download individually:", 
-    options=all_files,
-    default=None
-)
+# --- SIDEBAR: LOG MANAGER ---
+st.sidebar.header("Log File Manager")
+all_files = get_all_logs()
 
-# Individual Download Buttons for each selected file
+# Select All Feature
+select_all = st.sidebar.checkbox("Select All Files")
+
+if select_all:
+    selected_files = st.sidebar.multiselect(
+        "Files Selected:", 
+        options=all_files,
+        default=all_files
+    )
+else:
+    selected_files = st.sidebar.multiselect(
+        "Select files to download individually:", 
+        options=all_files
+    )
+
+# Individual Download Buttons
 if selected_files:
-    st.sidebar.subheader("Ready for Download")
+    st.sidebar.subheader(f"Downloads ({len(selected_files)})")
     for file_name in selected_files:
         file_data = download_file(file_name)
         if file_data:
@@ -88,14 +92,13 @@ if selected_files:
                 label=f"📥 {file_name}",
                 data=file_data,
                 file_name=file_name,
-                key=file_name # Unique key for each button
+                key=f"btn_{file_name}"
             )
 
 st.sidebar.divider()
 search_query = st.sidebar.text_input("🔍 Player Search", "cybersorfer").strip()
 
-# --- MAIN PAGE: ACTIVE SCAN ---
-st.subheader("Single File Analysis & iZurvive Export")
+# --- MAIN PAGE ---
 if all_files:
     active_file = st.selectbox("Select file to scan:", all_files)
     
@@ -115,8 +118,6 @@ if all_files:
                     csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button("Download CSV for iZurvive", csv, f"{active_file}.csv", "text/csv")
                 else:
-                    st.warning("No coordinates found in this ADM file.")
+                    st.warning("No coordinates found.")
             else:
                 st.text_area("Log Preview", raw_text, height=500)
-else:
-    st.error("No files found. Check FTP connection.")
