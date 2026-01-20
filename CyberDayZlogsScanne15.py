@@ -15,6 +15,7 @@ st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initi
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #ffffff !important; }
+    label, p, span, .stMarkdown, .stCaption { color: #ffffff !important; font-weight: 500 !important; }
     
     /* HIGH CONTRAST SIDEBAR */
     section[data-testid="stSidebar"] {
@@ -22,7 +23,7 @@ st.markdown("""
         border-right: 2px solid #30363d;
     }
 
-    /* BUTTON THEME: GREEN ACTION BUTTONS */
+    /* GREEN BUTTON THEME SYNC */
     .stFileUploader label [data-testid="stBaseButton-secondary"], 
     div.stButton > button {
         color: #ffffff !important;
@@ -33,14 +34,14 @@ st.markdown("""
         width: 100% !important;
     }
     
-    /* LOG ACTIVITY COLORS (EXACT SYNC) */
+    /* LOG ACTIVITY COLORS (SYNCED WITH v14-9) */
     .death-log { color: #ff4b4b !important; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; margin-bottom: 5px;}
     .connect-log { color: #28a745 !important; border-left: 3px solid #28a745; padding-left: 10px; margin-bottom: 5px;}
     .disconnect-log { color: #ffc107 !important; border-left: 3px solid #ffc107; padding-left: 10px; margin-bottom: 5px;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 3. 🐺 RESTORED: NITRADO FTP MANAGER (LOCKED) ---
+# --- 3. 🐺 NITRADO FTP MANAGER (LOCKED & FIXED) ---
 FTP_HOST, FTP_USER, FTP_PASS, FTP_PATH = "usla643.gamedata.io", "ni11109181_1", "343mhfxd", "/dayzps/config/"
 
 def get_ftp_connection():
@@ -66,57 +67,88 @@ def fetch_ftp_logs(f_days=None, s_dt=None, e_dt=None, s_h=0, e_h=23):
                 keep = True
                 if f_days and m_time < (now - timedelta(days=f_days)): keep = False
                 elif s_dt and e_dt and not (s_dt <= m_time.date() <= e_dt): keep = False
-                if not (s_h <= m_time.hour <= end_h): keep = False
+                
+                # FIX: Corrected variable name from end_h to e_h
+                if not (s_h <= m_time.hour <= e_h): keep = False
+                
                 if keep:
                     d_name = f"{filename} ({m_time.strftime('%m/%d %H:%M')})"
                     processed_files.append({"real": filename, "display": d_name, "time": m_time})
         st.session_state.all_logs = sorted(processed_files, key=lambda x: x['time'], reverse=True)
         ftp.quit()
 
-# --- 4. 🛠️ ADVANCED LOG FILTERING (EXACT SYNC WITH v14-9 FILE) ---
-def filter_v14_9_logic(files, mode, target_p=None, area_c=None, area_r=500):
-    # This function contains the exact coordinates and keyword logic 
-    # from your CyberDayZlogsScanne14 (9).py file.
+# --- 4. 🛠️ ADVANCED LOG FILTERING (EXACT SYNC WITH v14-9) ---
+def extract_v14_data(line):
+    name, coords = "System", None
+    try:
+        if 'Player "' in line: name = line.split('Player "')[1].split('"')[0]
+        if "pos=<" in line:
+            raw = line.split("pos=<")[1].split(">")[0]
+            pts = [p.strip() for p in raw.split(",")]
+            # X and Z plane distance strictly from your file logic
+            coords = [float(pts[0]), float(pts[2])] 
+    except: pass
+    return name, coords
+
+def filter_v14_9_exact(files, mode, target_p=None, area_c=None, area_r=500):
     report, raw_lines = {}, []
     all_content = []
+    first_ts = "00:00:00"
     
     for f in files:
         f.seek(0)
         content = f.read().decode("utf-8", errors="ignore")
         all_content.extend(content.splitlines())
+        if first_ts == "00:00:00":
+            t_match = re.search(r'(\d{2}:\d{2}:\d{2})', content)
+            if t_match: first_ts = t_match.group(1)
 
-    # COORDINATE PARSING: [X, Y, Z] -> We use X and Z for Area Search
+    header = f"******************************************************************************\nAdminLog started on {datetime.now().strftime('%Y-%m-%d')} at {first_ts}\n\n"
+
+    # Keywords strictly from v14 (9)
+    build_k = ["placed", "built", "built base", "built wall", "built gate", "built platform"]
+    raid_k = ["dismantled", "folded", "unmount", "unmounted", "packed"]
+    sess_k = ["connected", "disconnected", "died", "killed"]
+    boost_obj = ["fence kit", "nameless object", "fireplace", "garden plot", "barrel"]
+    boost_track = {}
+
     for line in all_content:
-        if "|" not in line or "pos=<" not in line: continue
-        low = line.lower()
+        if "|" not in line: continue
+        name, coords = extract_v14_data(line)
+        low, match = line.lower(), False
         
-        # Name and Coords Extraction
-        name = line.split('Player "')[1].split('"')[0] if 'Player "' in line else "System"
-        raw_pos = line.split("pos=<")[1].split(">")[0].split(",")
-        coords = [float(raw_pos[0]), float(raw_pos[2])] # X and Z
-        
-        match = False
-        if mode == "Area Activity Search" and area_c:
+        if mode == "Full Activity per Player": match = (target_p == name)
+        elif mode == "Area Activity Search" and coords and area_c:
             dist = math.sqrt((coords[0]-area_c[0])**2 + (coords[1]-area_c[1])**2)
-            if dist <= area_r: match = True
-        elif mode == "Full Activity per Player": match = (target_p == name)
-        
+            match = (dist <= area_r)
+        elif mode == "Building Only (Global)": match = any(k in low for k in build_k) and "pos=" in low
+        elif mode == "Raid Watch (Global)": match = any(k in low for k in raid_k) and "pos=" in low
+        elif mode == "Session Tracking (Global)": match = any(k in low for k in sess_k)
+        elif mode == "Suspicious Boosting Activity" and any(k in low for k in ["placed", "built"]) and any(obj in low for obj in boost_obj):
+            t_str = line.split(" | ")[0][-8:]
+            try:
+                t_val = datetime.strptime(t_str, "%H:%M:%S")
+                if name not in boost_track: boost_track[name] = []
+                boost_track[name].append({"time": t_val, "pos": coords})
+                if len(boost_track[name]) >= 3:
+                    prev = boost_track[name][-3]
+                    if (t_val - prev["time"]).total_seconds() <= 300 and math.sqrt((coords[0]-prev["pos"][0])**2 + (coords[1]-prev["pos"][1])**2) < 15:
+                        match = True
+            except: continue
+
         if match:
             raw_lines.append(line.strip())
-            # Status styling
-            status = "connect" if "connect" in low else "disconnect" if "disconnect" in low else "death" if "died" in low else "normal"
+            status = "connect" if "connect" in low else "disconnect" if "disconnect" in low else "death" if any(x in low for x in ["died", "killed"]) else "normal"
             if name not in report: report[name] = []
             report[name].append({"time": line.split(" | ")[0][-8:], "text": line.strip(), "status": status})
-
-    return report, "\n".join(raw_lines)
+            
+    return report, header + "\n".join(raw_lines)
 
 # --- 5. UI LAYOUT ---
 c_left, c_right = st.columns([1, 1.4])
 
 with st.sidebar:
     st.header("🐺 Nitrado FTP Manager")
-    
-    # RESTORED: Time Frame Features
     t_mode = st.radio("Time Frame:", ["Quick Select", "Search by Date/Hour"])
     f_days, s_dt, e_dt, s_h, e_h = None, None, None, 0, 23
     
@@ -131,18 +163,11 @@ with st.sidebar:
         fetch_ftp_logs(f_days, s_dt, e_dt, s_h, e_h); st.rerun()
 
     if 'all_logs' in st.session_state:
-        # RESTORED: File Type Checkboxes
         st.subheader("Filter File Types:")
         cb_cols = st.columns(3)
-        show_adm = cb_cols[0].checkbox("ADM", value=True)
-        show_rpt = cb_cols[1].checkbox("RPT", value=True)
-        show_log = cb_cols[2].checkbox("LOG", value=True)
+        s_adm, s_rpt, s_log = cb_cols[0].checkbox("ADM", True), cb_cols[1].checkbox("RPT", True), cb_cols[2].checkbox("LOG", True)
         
-        v_ext = []
-        if show_adm: v_ext.append(".ADM")
-        if show_rpt: v_ext.append(".RPT")
-        if show_log: v_ext.append(".LOG")
-        
+        v_ext = [ext for ext, val in zip([".ADM", ".RPT", ".LOG"], [s_adm, s_rpt, s_log]) if val]
         f_logs = [f for f in st.session_state.all_logs if f['real'].upper().endswith(tuple(v_ext))]
         
         sel_all = st.checkbox("Select All Visible")
@@ -160,16 +185,33 @@ with st.sidebar:
 
 with c_left:
     st.markdown("### 🛠️ Advanced Log Filtering")
-    # Content remains synced with your provided logic
     uploaded = st.file_uploader("Browse Files", accept_multiple_files=True)
     if uploaded:
-        # Location logic from v14 (9)
-        presets = {"NWAF": [4530, 10245], "Tisy": [1542, 13915], "Zenit": [8355, 5978], "Gorka": [9494, 8820], "VMC": [3824, 8912]}
-        mode = st.selectbox("Mode", ["Area Activity Search", "Full Activity per Player"])
+        # Scan players for dropdown
+        p_list = set()
+        for f in uploaded:
+            f.seek(0)
+            p_list.update(re.findall(r'Player "([^"]+)"', f.read().decode("utf-8", errors="ignore")))
         
+        mode = st.selectbox("Select Filter", ["Area Activity Search", "Full Activity per Player", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity"])
+        
+        t_p, a_c, a_r = None, None, 500
+        if mode == "Full Activity per Player":
+            t_p = st.selectbox("Select Player", sorted(list(p_list)))
+        elif mode == "Area Activity Search":
+            presets = {"NWAF": [4530, 10245], "Tisy": [1542, 13915], "Zenit": [8355, 5978], "Gorka": [9494, 8820], "VMC": [3824, 8912], "Zeleno": [2575, 5175]}
+            choice = st.selectbox("Quick Location", list(presets.keys()))
+            a_c, a_r = presets[choice], st.slider("Radius", 50, 2000, 500)
+
         if st.button("🚀 PROCESS UPLOADED LOGS"):
-            # Execute filter_v14_9_logic...
-            pass
+            rep, raw = filter_v14_9_exact(uploaded, mode, t_p, a_c, a_r)
+            st.session_state.res_rep, st.session_state.res_raw = rep, raw
+
+    if "res_rep" in st.session_state and st.session_state.res_rep:
+        st.download_button("💾 Download ADM", st.session_state.res_raw, "FILTERED.adm")
+        for p, evs in st.session_state.res_rep.items():
+            with st.expander(f"👤 {p}"):
+                for ev in evs: st.markdown(f"<div class='{ev['status']}-log'>{ev['text']}</div>", unsafe_allow_html=True)
 
 with c_right:
     st.markdown("### 📍 iZurvive Map")
