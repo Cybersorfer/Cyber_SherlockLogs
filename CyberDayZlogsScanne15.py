@@ -15,12 +15,8 @@ st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initi
 st.markdown("""
     <style>
     .stApp { background-color: #0e1117; color: #fafafa; }
-    /* Horizontal Checkbox Styling */
     [data-testid="stHorizontalBlock"] { gap: 0.5rem; }
-    /* Death and Activity Logs */
-    .death-log { color: #ff4b4b; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; }
-    .connect-log { color: #28a745; border-left: 3px solid #28a745; padding-left: 10px; }
-    /* Map Container Fix */
+    .stMultiSelect div div div div { max-height: 300px; overflow-y: auto; }
     iframe { border-radius: 10px; border: 1px solid #4b4b4b; }
     </style>
     """, unsafe_allow_html=True)
@@ -31,7 +27,7 @@ FTP_USER = "ni11109181_1"
 FTP_PASS = "343mhfxd"
 FTP_PATH = "/dayzps/config/"
 
-# --- 4. CORE FUNCTIONS (Integrated from .py) ---
+# --- 4. CORE FUNCTIONS (Integrated Logic) ---
 def get_ftp_connection():
     try:
         ftp = FTP(FTP_HOST)
@@ -50,18 +46,33 @@ def fetch_ftp_logs():
         st.session_state.all_logs = sorted([f for f in files if f.upper().endswith(valid)], reverse=True)
         ftp.quit()
 
-def download_file(file_name):
-    ftp = get_ftp_connection()
-    if ftp:
-        buffer = io.BytesIO()
-        ftp.retrbinary(f"RETR {file_name}", buffer.write)
-        ftp.quit()
-        return buffer.getvalue()
-    return None
+# NEW: Function to extract and read files from uploaded ZIPs
+def process_uploaded_input(uploaded_files):
+    all_content = []
+    for uploaded_file in uploaded_files:
+        # Check if the uploaded file is a ZIP
+        if uploaded_file.name.endswith('.zip'):
+            with zipfile.ZipFile(uploaded_file, 'r') as z:
+                for file_info in z.infolist():
+                    # Only read relevant log types
+                    if file_info.filename.upper().endswith(('.ADM', '.RPT', '.LOG')):
+                        with z.open(file_info) as f:
+                            all_content.append({
+                                "name": file_info.filename,
+                                "text": f.read().decode('utf-8', errors='ignore')
+                            })
+        else:
+            # Handle regular .ADM or .RPT files
+            all_content.append({
+                "name": uploaded_file.name,
+                "text": uploaded_file.read().decode('utf-8', errors='ignore')
+            })
+    return all_content
 
-def calculate_distance(p1, p2):
-    if not p1 or not p2: return 999999
-    return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
+def parse_adm_data(content):
+    pattern = r'(\d{2}:\d{2}:\d{2}).*?player\s"(.*?)"\s.*?pos=<([\d\.-]+),\s[\d\.-]+,\s([\d\.-]+)>'
+    matches = re.findall(pattern, content)
+    return [{"Time": m[0], "Player": m[1], "X": float(m[2]), "Z": float(m[3])} for m in matches]
 
 # --- 5. UI LAYOUT ---
 
@@ -76,14 +87,12 @@ with st.sidebar:
     s_rpt = c2.checkbox("RPT", value=True)
     s_log = c3.checkbox("LOG", value=True)
     
-    # Filter list
     v_ext = []
     if s_adm: v_ext.append(".ADM")
     if s_rpt: v_ext.append(".RPT")
     if s_log: v_ext.append(".LOG")
     f_logs = [f for f in st.session_state.get('all_logs', []) if f.upper().endswith(tuple(v_ext))]
     
-    # Controls
     col_a, col_b = st.columns(2)
     if col_a.button("Select All"): st.session_state.sel_list = f_logs
     if col_b.button("Clear All"): st.session_state.sel_list = []
@@ -104,31 +113,44 @@ with st.sidebar:
             ftp.quit()
             st.download_button("💾 Download ZIP Archive", zip_buf.getvalue(), "cyber_logs.zip")
 
-    st.divider()
-    table_search = st.text_input("🔍 Table Search", key="tbl_search")
-
-# --- MAIN DASHBOARD: THE TWO SQUARES ---
-col_left, col_right = st.columns([1, 1.8]) # Map gets 1.8x the space
+# --- MAIN DASHBOARD ---
+col_left, col_right = st.columns([1, 1.8])
 
 with col_left:
-    # THE BLUE SQUARE: ADVANCED LOG FILTERING
     st.markdown("### 🛠️ Advanced Log Filtering")
-    uploaded = st.file_uploader("Upload logs for content analysis", accept_multiple_files=True)
+    # UPDATED: File uploader now highlights ZIP support
+    uploaded = st.file_uploader("Upload .ADM, .RPT or .ZIP logs", accept_multiple_files=True)
     
     if uploaded:
-        mode = st.selectbox("Analysis Mode", ["Full Activity per Player", "Session Tracking", "Building Only", "Raid Watch", "Area Activity Search"])
-        if st.button("🚀 Process Uploaded Logs"):
-            # Your filter_logs() logic would execute here
-            st.success("Analysis results generated below.")
-            # Example Placeholder output
-            st.info("Results table would appear here as per your .py file.")
+        mode = st.selectbox("Analysis Mode", ["Full Activity per Player", "Area Activity Search", "Raid Watch", "Boosting Check"])
+        search_filter = st.text_input("Player Search (Inside File Content)", "")
+        
+        if st.button("🚀 Process & Search"):
+            with st.spinner("Extracting and scanning logs..."):
+                extracted_data = process_uploaded_input(uploaded)
+                
+                final_results = []
+                for entry in extracted_data:
+                    # Filter based on player name if provided
+                    if not search_filter or search_filter.lower() in entry['text'].lower():
+                        if entry['name'].upper().endswith('.ADM'):
+                            coords = parse_adm_data(entry['text'])
+                            for c in coords:
+                                c['Source File'] = entry['name']
+                                final_results.append(c)
+                
+                if final_results:
+                    df = pd.DataFrame(final_results)
+                    st.success(f"Found {len(df)} matches in {len(extracted_data)} files.")
+                    st.dataframe(df, use_container_width=True)
+                    st.download_button("Download CSV for iZurvive", df.to_csv(index=False), "scan_results.csv")
+                else:
+                    st.warning("No matches found for your search criteria.")
 
 with col_right:
-    # THE RED SQUARE: IZURVIVE MAP (MAX SIZE)
     st.markdown("### 📍 iZurvive Map")
     if st.button("🔄 Refresh Map Overlay"):
         st.session_state.mv = st.session_state.get('mv', 0) + 1
     
-    # Using the iframe from your screenshot requirements
     m_url = f"https://www.izurvive.com/serverlogs/?v={st.session_state.get('mv', 0)}"
     components.iframe(m_url, height=850, scrolling=True)
