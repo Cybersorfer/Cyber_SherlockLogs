@@ -3,7 +3,6 @@ import pandas as pd
 import re
 from ftplib import FTP
 import io
-import zipfile
 
 # --- FTP CONFIGURATION ---
 FTP_HOST = "usla643.gamedata.io"
@@ -16,7 +15,7 @@ st.set_page_config(page_title="CyberDayZ Scanner v27.9", layout="wide")
 # --- FUNCTIONS ---
 
 def get_ftp_connection():
-    """Establishes a connection to the Nitrado FTP server."""
+    """Establishes connection to Nitrado FTP."""
     try:
         ftp = FTP(FTP_HOST)
         ftp.login(user=FTP_USER, passwd=FTP_PASS)
@@ -27,34 +26,28 @@ def get_ftp_connection():
         return None
 
 def get_all_logs():
-    """Lists .ADM, .RPT, and .log files from the FTP folder."""
+    """Lists .ADM, .RPT, and .log files."""
     ftp = get_ftp_connection()
     if ftp:
         files = ftp.nlst()
-        # Filter for all requested types
         valid_extensions = ('.ADM', '.RPT', '.log')
         logs = [f for f in files if f.upper().endswith(valid_extensions)]
         ftp.quit()
         return sorted(logs, reverse=True)
     return []
 
-def download_multiple_files(file_list):
-    """Downloads multiple files and wraps them into a single ZIP for the user."""
+def download_file(file_name):
+    """Downloads a single file's content from FTP."""
     ftp = get_ftp_connection()
-    zip_buffer = io.BytesIO()
-    
     if ftp:
-        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-            for file_name in file_list:
-                file_buffer = io.BytesIO()
-                ftp.retrbinary(f"RETR {file_name}", file_buffer.write)
-                zip_file.writestr(file_name, file_buffer.getvalue())
+        buffer = io.BytesIO()
+        ftp.retrbinary(f"RETR {file_name}", buffer.write)
         ftp.quit()
-        return zip_buffer.getvalue()
+        return buffer.getvalue()
     return None
 
 def parse_adm_data(content):
-    """Extracts player coordinates from .ADM content."""
+    """Parses coordinates for iZurvive."""
     pattern = r'(\d{2}:\d{2}:\d{2}).*?player\s"(.*?)"\s.*?pos=<([\d\.-]+),\s[\d\.-]+,\s([\d\.-]+)>'
     matches = re.findall(pattern, content)
     data = [{"Time": m[0], "Player": m[1], "X": float(m[2]), "Z": float(m[3])} for m in matches]
@@ -64,58 +57,66 @@ def parse_adm_data(content):
 
 st.title("🐺 CyberDayZ Log Scanner v27.9")
 
-# 1. Multi-Select in Sidebar
-st.sidebar.header("Bulk Operations")
-all_available_files = get_all_logs()
+# --- SIDEBAR: SCROLLABLE SELECTOR ---
+st.sidebar.header("Log File Manager")
+all_files = get_all_logs()
 
-selected_for_bulk = st.sidebar.multiselect(
-    "Select files to download (.ZIP)", 
-    options=all_available_files,
-    help="Select multiple files to download them all at once in a ZIP archive."
+# Using a standard multiselect with a height adjustment via CSS 
+# to ensure it expands or scrolls properly
+st.markdown("""
+    <style>
+        .stMultiSelect div div div div {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+""", unsafe_allow_all_html=True)
+
+selected_files = st.sidebar.multiselect(
+    "Select files to download individually:", 
+    options=all_files,
+    default=None
 )
 
-if selected_for_bulk:
-    if st.sidebar.button("Prepare ZIP Download"):
-        with st.spinner("Zipping files..."):
-            zip_data = download_multiple_files(selected_for_bulk)
-            if zip_data:
-                st.sidebar.download_button(
-                    label="💾 Download ZIP Archive",
-                    data=zip_data,
-                    file_name="dayz_logs_bundle.zip",
-                    mime="application/zip"
-                )
+# Individual Download Buttons for each selected file
+if selected_files:
+    st.sidebar.subheader("Ready for Download")
+    for file_name in selected_files:
+        file_data = download_file(file_name)
+        if file_data:
+            st.sidebar.download_button(
+                label=f"📥 {file_name}",
+                data=file_data,
+                file_name=file_name,
+                key=file_name # Unique key for each button
+            )
 
 st.sidebar.divider()
-search_query = st.sidebar.text_input("🔍 Search Player (for Active Scan)", "").strip()
+search_query = st.sidebar.text_input("🔍 Player Search", "cybersorfer").strip()
 
-# 2. Single File Analysis
+# --- MAIN PAGE: ACTIVE SCAN ---
 st.subheader("Single File Analysis & iZurvive Export")
-if all_available_files:
-    active_file = st.selectbox("Select a file to scan for coordinates or preview:", all_available_files)
+if all_files:
+    active_file = st.selectbox("Select file to scan:", all_files)
     
     if st.button("Run Scan"):
-        ftp = get_ftp_connection()
-        if ftp:
-            buffer = io.BytesIO()
-            ftp.retrbinary(f"RETR {active_file}", buffer.write)
-            raw_text = buffer.getvalue().decode('utf-8', errors='ignore')
-            ftp.quit()
+        raw_data = download_file(active_file)
+        if raw_data:
+            raw_text = raw_data.decode('utf-8', errors='ignore')
             
-            # ADM Parsing logic
             if active_file.upper().endswith(".ADM"):
                 df = parse_adm_data(raw_text)
                 if not df.empty:
                     if search_query:
                         df = df[df['Player'].str.contains(search_query, case=False)]
+                    
+                    st.success(f"Scanning: {active_file}")
                     st.dataframe(df, use_container_width=True)
                     csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button("Download CSV for iZurvive", csv, f"{active_file}.csv", "text/csv")
                 else:
                     st.warning("No coordinates found in this ADM file.")
-            # RPT and Log Preview
             else:
-                st.info(f"Previewing {active_file}")
-                st.text_area("Log Content", raw_text, height=500)
+                st.text_area("Log Preview", raw_text, height=500)
 else:
-    st.error(f"No files found at {FTP_PATH}")
+    st.error("No files found. Check FTP connection.")
