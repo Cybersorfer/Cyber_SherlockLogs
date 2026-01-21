@@ -114,7 +114,7 @@ if check_password():
             ftp.quit()
 
     # ==============================================================================
-    # SECTION 4: CORE FUNCTIONS (RESTORED LOGIC)
+    # SECTION 4: CORE FUNCTIONS (IDENTICAL TO YOUR WORKING FILE)
     # ==============================================================================
     def make_izurvive_link(coords):
         if coords and len(coords) >= 2:
@@ -129,8 +129,8 @@ if check_password():
             if "pos=<" in line:
                 raw = line.split("pos=<")[1].split(">")[0]
                 parts = [p.strip() for p in raw.split(",")]
-                # Restored horizontal logic: Index 0 (X) and Index 2 (Z)
-                coords = [float(parts[0]), float(parts[2])] 
+                # EXACT LOGIC: X and Y coordinates (DayZ horizontal plane index 0, 1)
+                coords = [float(parts[0]), float(parts[1])] 
         except: pass 
         return str(name), coords
 
@@ -142,7 +142,7 @@ if check_password():
     # SECTION 5: 🛠️ ADVANCED LOG FILTERING (EXACT SYNC)
     # ==============================================================================
     def filter_logs(files, mode, target_player=None, area_coords=None, area_radius=500):
-        grouped_report, boosting_tracker = {}, {}
+        grouped_report, player_positions, boosting_tracker = {}, {}, {}
         raw_filtered_lines = []
         header = "******************************************************************************\nAdminLog started on 2026-01-19 at 08:43:52\n\n"
 
@@ -162,6 +162,7 @@ if check_password():
             time_part = line.split(" | ")[0]
             clean_time = time_part.split("]")[-1].strip() if "]" in time_part else time_part.strip()
             name, coords = extract_player_and_coords(line)
+            if name != "System/Server" and coords: player_positions[name] = coords
             low, should_process = line.lower(), False
 
             if mode == "Full Activity per Player":
@@ -233,29 +234,41 @@ if check_password():
     col1, col2 = st.columns([1, 2.3])
     with col1:
         st.markdown("### 🛠️ Advanced Log Filtering")
-        uploaded = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
-        if uploaded:
+        uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
+        if uploaded_files:
             mode = st.selectbox("Select Filter", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity", "Area Activity Search"])
-            t_p, a_c, a_r = None, None, 500
+            t_p, area_coords, area_radius = None, None, 500
             
             if mode == "Full Activity per Player":
                 all_names = []
-                for f in uploaded:
+                for f in uploaded_files:
                     f.seek(0)
                     all_names.extend([l.split('"')[1] for l in f.read().decode("utf-8", errors="ignore").splitlines() if 'Player "' in l])
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
             elif mode == "Area Activity Search":
+                # EXACT PRESETS FROM YOUR LAST WORKING FILE
                 presets = {
-                    "NWAF": [4530.0, 10245.0], "Tisy Military": [1542.0, 13915.0], 
-                    "VMC": [3824.0, 8912.0], "Vybor": [3785.0, 8925.0], "Radio Zenit": [8355.0, 5978.0],
+                    "Custom Coordinates": None,
+                    "Tisy Military": [1542.0, 13915.0],
+                    "NWAF (North West Airfield)": [4530.0, 10245.0],
+                    "VMC (Vybor Military)": [3824.0, 8912.0],
+                    "Vybor (Town Center)": [3785.0, 8925.0],
+                    "Radio Zenit": [8355.0, 5978.0],
                     "Zelenogorsk": [2540.0, 5085.0]
                 }
-                choice = st.selectbox("Quick Location", list(presets.keys()))
-                a_c, a_r = presets[choice], st.slider("Radius (Meters)", 50, 2000, 500)
+                selection = st.selectbox("Quick Locations", list(presets.keys()))
+                if selection == "Custom Coordinates":
+                    cx = st.number_input("Center X", value=1542.0)
+                    cy = st.number_input("Center Y", value=13915.0)
+                    area_coords = [cx, cy]
+                else:
+                    area_coords = presets[selection]
+                    st.write(f"Coords: {area_coords}")
+                area_radius = st.slider("Search Radius (Meters)", 50, 2000, 500)
 
             if st.button("🚀 Process Logs"):
-                rep, raw = filter_logs(uploaded, mode, t_p, a_c, a_r)
-                st.session_state.track_data = rep
+                report, raw = filter_logs(uploaded_files, mode, t_p, area_coords, area_radius)
+                st.session_state.track_data = report
                 st.session_state.raw_download = raw
         
         if st.session_state.get("track_data"):
