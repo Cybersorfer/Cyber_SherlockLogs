@@ -11,7 +11,6 @@ import streamlit.components.v1 as components
 # ==============================================================================
 # SECTION 1: TEAM ACCESS CONTROL & IP TRACKER (THE SHELL)
 # ==============================================================================
-
 team_accounts = {
     "cybersorfer": "cyber001",
     "Admin": "cyber001",
@@ -56,7 +55,7 @@ def check_password():
 if check_password():
 
     # ==============================================================================
-    # SECTION 2: GLOBAL PAGE SETUP & THEME (EXACT RESTORATION)
+    # SECTION 2: GLOBAL PAGE SETUP & THEME (RESTORATION)
     # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
 
@@ -80,7 +79,7 @@ if check_password():
         """, unsafe_allow_html=True)
 
     # ==============================================================================
-    # SECTION 3: 🐺 NITRADO FTP MANAGER (EXACT RESTORATION)
+    # SECTION 3: 🐺 NITRADO FTP MANAGER (RESTORATION)
     # ==============================================================================
     FTP_HOST, FTP_USER, FTP_PASS, FTP_PATH = "usla643.gamedata.io", "ni11109181_1", "343mhfxd", "/dayzps/config/"
 
@@ -115,7 +114,7 @@ if check_password():
             ftp.quit()
 
     # ==============================================================================
-    # SECTION 4: 🛠️ ADVANCED LOG FILTERING (V14-11 EXACT RESTORATION)
+    # SECTION 4: 🛠️ ADVANCED LOG FILTERING (RESTORED AREA SEARCH)
     # ==============================================================================
     def extract_v14_data(line):
         name, coords = "System", None
@@ -124,10 +123,14 @@ if check_password():
             if "pos=<" in line:
                 raw = line.split("pos=<")[1].split(">")[0]
                 pts = [p.strip() for p in raw.split(",")]
-                # Restored: Index 0 (X) and Index 2 (Z)
+                # Horizontal plane: X (pts[0]) and Z (pts[2])
                 coords = [float(pts[0]), float(pts[2])] 
         except: pass
         return name, coords
+
+    def calculate_distance(p1, p2):
+        if not p1 or not p2: return 999999
+        return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
     def filter_v14_exact(files, mode, target_p=None, area_c=None, area_r=500):
         report, raw_lines = {}, []
@@ -151,9 +154,10 @@ if check_password():
             if "|" not in line: continue
             name, coords = extract_v14_data(line)
             low, match = line.lower(), False
+            
             if mode == "Full Activity per Player": match = (target_p == name)
             elif mode == "Area Activity Search" and coords and area_c:
-                dist = math.sqrt((coords[0]-area_c[0])**2 + (coords[1]-area_c[1])**2)
+                dist = calculate_distance(coords, area_c)
                 match = (dist <= area_r)
             elif mode == "Building Only (Global)": match = any(k in low for k in build_k) and "pos=" in low
             elif mode == "Raid Watch (Global)": match = any(k in low for k in raid_k) and "pos=" in low
@@ -166,7 +170,7 @@ if check_password():
                     boost_track[name].append({"time": t_val, "pos": coords})
                     if len(boost_track[name]) >= 3:
                         prev = boost_track[name][-3]
-                        if (t_val - prev["time"]).total_seconds() <= 300 and math.sqrt((coords[0]-prev["pos"][0])**2 + (coords[1]-prev["pos"][1])**2) < 15:
+                        if (t_val - prev["time"]).total_seconds() <= 300 and calculate_distance(coords, prev["pos"]) < 15:
                             match = True
                 except: continue
 
@@ -181,7 +185,7 @@ if check_password():
     # SECTION 5: UI LAYOUT & SIDEBAR
     # ==============================================================================
     with st.sidebar:
-        st.title("🐺 Admin Console")
+        st.title("🐺 Admin Dashboard")
         st.write(f"Logged in: **{st.session_state['current_user']}**")
         if st.button("🔌 Log Out"):
             log_session(st.session_state['current_user'], "LOGOUT")
@@ -192,24 +196,20 @@ if check_password():
         if st.session_state['current_user'] in ["cybersorfer", "Admin"]:
             with st.expander("🛡️ Security Audit"):
                 try:
-                    with open("login_history.txt", "r") as f: st.text_area("Logs", f.read(), height=200)
+                    with open("login_history.txt", "r") as f: st.text_area("Audit Log", f.read(), height=200)
                 except: st.write("No logs yet.")
 
         st.header("Nitrado FTP Manager")
         if st.button("🔄 Sync FTP List"): fetch_ftp_logs(); st.rerun()
         if 'all_logs' in st.session_state:
-            cb_cols = st.columns(3)
-            s_adm, s_rpt, s_log = cb_cols[0].checkbox("ADM", True), cb_cols[1].checkbox("RPT", True), cb_cols[2].checkbox("LOG", True)
-            v_ext = [ext for ext, val in zip([".ADM", ".RPT", ".LOG"], [s_adm, s_rpt, s_log]) if val]
-            f_logs = [f for f in st.session_state.all_logs if f['real'].upper().endswith(tuple(v_ext))]
-            selected_disp = st.multiselect("Select Files:", options=[f['display'] for f in f_logs])
+            selected_disp = st.multiselect("Select Files:", options=[f['display'] for f in st.session_state.all_logs])
             if selected_disp and st.button("📦 Prepare ZIP"):
                 buf = io.BytesIO()
                 ftp = get_ftp_connection()
                 if ftp:
                     with zipfile.ZipFile(buf, "w") as zf:
                         for disp in selected_disp:
-                            real = next(f['real'] for f in f_logs if f['display'] == disp)
+                            real = next(f['real'] for f in st.session_state.all_logs if f['display'] == disp)
                             fbuf = io.BytesIO(); ftp.retrbinary(f"RETR {real}", fbuf.write); zf.writestr(real, fbuf.getvalue())
                     ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip")
 
@@ -218,14 +218,17 @@ if check_password():
         st.markdown("### 🛠️ Advanced Log Filtering")
         uploaded = st.file_uploader("Browse Files", accept_multiple_files=True)
         if uploaded:
-            p_list = set()
-            for f in uploaded:
-                f.seek(0); p_list.update(re.findall(r'Player "([^"]+)"', f.read().decode("utf-8", errors="ignore")))
             mode = st.selectbox("Select Filter", ["Area Activity Search", "Full Activity per Player", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity"])
             t_p, a_c, a_r = None, None, 500
-            if mode == "Full Activity per Player": t_p = st.selectbox("Select Player", sorted(list(p_list)))
+            if mode == "Full Activity per Player":
+                p_list = set()
+                for f in uploaded: f.seek(0); p_list.update(re.findall(r'Player "([^"]+)"', f.read().decode("utf-8", errors="ignore")))
+                t_p = st.selectbox("Select Player", sorted(list(p_list)))
             elif mode == "Area Activity Search":
-                presets = {"NWAF": [4530, 10245], "Tisy": [1542, 13915], "Zenit": [8355, 5978], "Gorka": [9494, 8820], "VMC": [3824, 8912]}
+                presets = {
+                    "NWAF": [4530, 10245], "Tisy": [1542, 13915], "Zenit": [8355, 5978], 
+                    "Gorka": [9494, 8820], "VMC": [3824, 8912], "Vybor": [3785, 8925], "Zeleno": [2575, 5175]
+                }
                 choice = st.selectbox("Quick Location", list(presets.keys()))
                 a_c, a_r = presets[choice], st.slider("Radius", 50, 2000, 500)
             if st.button("🚀 PROCESS UPLOADED LOGS"):
