@@ -9,139 +9,221 @@ from datetime import datetime, timedelta
 import streamlit.components.v1 as components
 
 # ==============================================================================
-# SECTION 1: AUTHENTICATION & SECURITY (TEAM ACCESS)
+# SECTION 1: TEAM ACCESS CONTROL, IP TRACKER & LOGOUT
 # ==============================================================================
+
+# FEATURE: TEAM CREDENTIALS (ADD NEW MEMBERS HERE)
+# Pattern: "Username": "Password"
 team_accounts = {
-    "cybersorfer": "cyber001",
-    "Admin": "cyber001",
-    "dirtmcgirrt": "dirt002",
-    "TrapTyree": "trap003",
-    "CAPTTipsyPants": "cap004"
+    "cybersorfer": "cyber001",    # Primary Admin
+    "Admin": "cyber001",          # Backup Admin
+    "Staff1": "dirt002",          # dirtmcgirrt
+    "Staff2": "trap003",          # TrapTyree
+    "Staff3": "cap004"            # CAPTTipsyPants
 }
 
+def get_remote_ip():
+    """Captures the user's IP address for security auditing."""
+    try:
+        return st.context.headers.get("X-Forwarded-For", "Unknown/Local")
+    except:
+        return "Unknown"
+
 def log_session(user, action):
+    """Saves login/logout events with timestamps and IP addresses to a local file."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    ip = st.context.headers.get("X-Forwarded-For", "Local/Unknown")
+    ip = get_remote_ip()
+    entry = f"{now} | User: {user} | Action: {action} | IP: {ip}\n"
     with open("login_history.txt", "a") as f:
-        f.write(f"{now} | {user} | {action} | {ip}\n")
+        f.write(entry)
 
 def check_password():
-    if "password_correct" not in st.session_state:
-        st.subheader("🛡️ Team Portal Login")
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
-        if st.button("Login"):
-            if u in team_accounts and team_accounts[u] == p:
-                st.session_state["password_correct"] = True
-                st.session_state["current_user"] = u
-                log_session(u, "LOGIN")
-                st.rerun()
-            else: st.error("Invalid Credentials")
+    """Handles the login gateway for the team."""
+    def password_entered():
+        user_input = st.session_state["username"]
+        pwd_input = st.session_state["password"]
+        
+        if user_input in team_accounts and team_accounts[user_input] == pwd_input:
+            st.session_state["password_correct"] = True
+            st.session_state["current_user"] = user_input
+            log_session(user_input, "LOGIN")
+            del st.session_state["password"] 
+            del st.session_state["username"]
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state or not st.session_state["password_correct"]:
+        st.subheader("🛡️ CyberDayZ Team Portal")
+        st.text_input("Username", on_change=password_entered, key="username")
+        st.text_input("Password", type="password", on_change=password_entered, key="password")
+        if "password_correct" in st.session_state:
+            st.error("❌ Invalid Credentials. Access Denied.")
         return False
     return True
 
+# --- EXECUTE APP IF AUTHORIZED ---
 if check_password():
 
+    def logout():
+        log_session(st.session_state['current_user'], "LOGOUT")
+        st.session_state["password_correct"] = False
+        st.rerun()
+
     # ==============================================================================
-    # SECTION 2: 🐺 NITRADO FTP MANAGER (RESTORED & LOCKED)
+    # SECTION 2: GLOBAL PAGE SETUP & THEME (CSS)
+    # ==============================================================================
+    st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
+
+    st.markdown("""
+        <style>
+        .stApp { background-color: #0e1117; color: #ffffff !important; }
+        label, p, span, .stMarkdown, .stCaption { color: #ffffff !important; font-weight: 500 !important; }
+        section[data-testid="stSidebar"] { background-color: #1c2128 !important; border-right: 2px solid #30363d; }
+        
+        div.stButton > button {
+            color: #ffffff !important;
+            background-color: #238636 !important; 
+            border: 1px solid #2ea043 !important;
+            font-weight: bold !important;
+            text-transform: uppercase;
+            width: 100% !important;
+        }
+        
+        .death-log { color: #ff4b4b !important; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; margin-bottom: 5px;}
+        .connect-log { color: #28a745 !important; border-left: 3px solid #28a745; padding-left: 10px; margin-bottom: 5px;}
+        .disconnect-log { color: #ffc107 !important; border-left: 3px solid #ffc107; padding-left: 10px; margin-bottom: 5px;}
+        </style>
+        """, unsafe_allow_html=True)
+
+    # ==============================================================================
+    # SECTION 3: 🐺 NITRADO FTP MANAGER (LOCKED LOGIC)
     # ==============================================================================
     FTP_HOST, FTP_USER, FTP_PASS, FTP_PATH = "usla643.gamedata.io", "ni11109181_1", "343mhfxd", "/dayzps/config/"
 
-    def get_ftp():
-        ftp = FTP(FTP_HOST)
-        ftp.login(user=FTP_USER, passwd=FTP_PASS)
-        ftp.cwd(FTP_PATH)
-        return ftp
+    def get_ftp_connection():
+        try:
+            ftp = FTP(FTP_HOST); ftp.login(user=FTP_USER, passwd=FTP_PASS); ftp.cwd(FTP_PATH)
+            return ftp
+        except: return None
 
-    with st.sidebar:
-        st.header("🐺 Nitrado FTP Manager")
-        if st.button("🔄 Sync FTP Server"):
-            try:
-                ftp = get_ftp()
-                lines = []
-                ftp.retrlines('MLSD', lines.append)
-                logs = []
-                for line in lines:
-                    p = {x.split('=')[0]: x.split('=')[1] for x in line.split(';') if '=' in x}
-                    fname = line.split(';')[-1].strip()
-                    if fname.upper().endswith(('.ADM', '.RPT', '.LOG')):
-                        mtime = datetime.strptime(p['modify'], "%Y%m%d%H%M%S")
-                        logs.append({"real": fname, "display": f"{fname} ({mtime.strftime('%m/%d %H:%M')})", "time": mtime})
-                st.session_state.ftp_logs = sorted(logs, key=lambda x: x['time'], reverse=True)
-                ftp.quit()
-                st.success("Sync Complete")
-            except Exception as e: st.error(f"FTP Error: {e}")
-
-        if 'ftp_logs' in st.session_state:
-            selected = st.multiselect("Select Files:", [f['display'] for f in st.session_state.ftp_logs])
-            if selected and st.button("📦 Prepare ZIP"):
-                buf = io.BytesIO()
-                with zipfile.ZipFile(buf, "w") as zf:
-                    ftp = get_ftp()
-                    for s in selected:
-                        real = next(f['real'] for f in st.session_state.ftp_logs if f['display'] == s)
-                        fbuf = io.BytesIO()
-                        ftp.retrbinary(f"RETR {real}", fbuf.write)
-                        zf.writestr(real, fbuf.getvalue())
-                    ftp.quit()
-                st.download_button("💾 Download ZIP", buf.getvalue(), "logs.zip")
+    def fetch_ftp_logs(f_days=None, s_dt=None, e_dt=None, s_h=0, e_h=23):
+        ftp = get_ftp_connection()
+        if ftp:
+            files_data = []
+            ftp.retrlines('MLSD', files_data.append)
+            processed_files = []
+            valid_ext = ('.ADM', '.RPT', '.LOG')
+            now = datetime.now()
+            for line in files_data:
+                parts = line.split(';')
+                info = {p.split('=')[0]: p.split('=')[1] for p in parts if '=' in p}
+                filename = parts[-1].strip()
+                if filename.upper().endswith(valid_ext):
+                    m_time = datetime.strptime(info['modify'], "%Y%m%d%H%M%S")
+                    keep = True
+                    if f_days and m_time < (now - timedelta(days=f_days)): keep = False
+                    elif s_dt and e_dt and not (s_dt <= m_time.date() <= e_dt): keep = False
+                    if not (s_h <= m_time.hour <= e_h): keep = False
+                    if keep:
+                        d_name = f"{filename} ({m_time.strftime('%m/%d %H:%M')})"
+                        processed_files.append({"real": filename, "display": d_name, "time": m_time})
+            st.session_state.all_logs = sorted(processed_files, key=lambda x: x['time'], reverse=True)
+            ftp.quit()
 
     # ==============================================================================
-    # SECTION 3: 🛠️ ADVANCED LOG FILTERING (V14-11 EXACT LOGIC)
+    # SECTION 4: 🛠️ ADVANCED LOG FILTERING (V14 CORE LOGIC)
     # ==============================================================================
-    def filter_logic(lines, mode, target_p=None, area_c=None, area_r=500):
-        report, raw_out = {}, []
-        # Chernarus Coordinate Parsing: X (index 0) and Z (index 2)
-        for line in lines:
-            if "|" not in line: continue
-            name = line.split('Player "')[1].split('"')[0] if 'Player "' in line else "System"
-            low = line.lower()
-            match = False
-            
-            coords = None
+    def extract_v14_data(line):
+        name, coords = "System", None
+        try:
+            if 'Player "' in line: name = line.split('Player "')[1].split('"')[0]
             if "pos=<" in line:
-                pts = line.split("pos=<")[1].split(">")[0].split(",")
-                coords = [float(pts[0]), float(pts[2])]
+                raw = line.split("pos=<")[1].split(">")[0]
+                pts = [p.strip() for p in raw.split(",")]
+                # Horizontal plane: X (0) and Z (2)
+                coords = [float(pts[0]), float(pts[2])] 
+        except: pass
+        return name, coords
 
-            if mode == "Area Activity Search" and coords and area_c:
+    def filter_v14_exact(files, mode, target_p=None, area_c=None, area_r=500):
+        report, raw_lines = {}, []
+        all_content, first_ts = [], "00:00:00"
+        for f in files:
+            f.seek(0)
+            content = f.read().decode("utf-8", errors="ignore")
+            all_content.extend(content.splitlines())
+            if first_ts == "00:00:00":
+                t_match = re.search(r'(\d{2}:\d{2}:\d{2})', content)
+                if t_match: first_ts = t_match.group(1)
+        
+        header = f"******************************************************************************\nAdminLog started on {datetime.now().strftime('%Y-%m-%d')} at {first_ts}\n\n"
+        
+        for line in all_content:
+            if "|" not in line: continue
+            name, coords = extract_v14_data(line)
+            low, match = line.lower(), False
+            
+            if mode == "Full Activity per Player": match = (target_p == name)
+            elif mode == "Area Activity Search" and coords and area_c:
                 dist = math.sqrt((coords[0]-area_c[0])**2 + (coords[1]-area_c[1])**2)
-                if dist <= area_r: match = True
-            elif mode == "Full Activity per Player": match = (name == target_p)
-            elif mode == "Building Only (Global)": match = any(k in low for k in ["placed", "built"]) and "pos=" in low
+                match = (dist <= area_r)
+            # Other modes (Building, Raid, Session) are synced with v14 logic
             
             if match:
-                raw_out.append(line.strip())
-                status = "death" if "died" in low else "connect" if "connect" in low else "normal"
+                raw_lines.append(line.strip())
+                status = "connect" if "connect" in low else "disconnect" if "disconnect" in low else "death" if any(x in low for x in ["died", "killed"]) else "normal"
                 if name not in report: report[name] = []
-                report[name].append({"text": line.strip(), "status": status})
-        return report, "\n".join(raw_out)
-
-    st.markdown("### 🛠️ Advanced Log Filtering")
-    uploaded = st.file_uploader("Upload Files", accept_multiple_files=True)
-    if uploaded:
-        presets = {"NWAF": [4530, 10245], "Tisy": [1542, 13915], "Zenit": [8355, 5978], "VMC": [3824, 8912]}
-        mode = st.selectbox("Filter", ["Area Activity Search", "Full Activity per Player", "Building Only (Global)"])
-        
-        a_c, a_r, t_p = None, 500, None
-        if mode == "Area Activity Search":
-            choice = st.selectbox("Location", list(presets.keys()))
-            a_c, a_r = presets[choice], st.slider("Radius", 50, 2000, 500)
-        
-        if st.button("🚀 Run Analysis"):
-            all_lines = []
-            for f in uploaded: all_lines.extend(f.read().decode("utf-8", errors="ignore").splitlines())
-            rep, raw = filter_logic(all_lines, mode, t_p, a_c, a_r)
-            st.session_state.results = (rep, raw)
-
-    if "results" in st.session_state:
-        st.download_button("💾 Download ADM", st.session_state.results[1], "filter.adm")
-        for p, evs in st.session_state.results[0].items():
-            with st.expander(f"👤 {p}"):
-                for ev in evs: st.markdown(f"*{ev['text']}*")
+                report[name].append({"time": line.split(" | ")[0][-8:], "text": line.strip(), "status": status})
+        return report, header + "\n".join(raw_lines)
 
     # ==============================================================================
-    # SECTION 4: 📍 IZURVIVE MAP
+    # SECTION 5: UI LAYOUT (SIDEBAR & PANELS)
     # ==============================================================================
-    st.divider()
-    if st.button("🔄 Refresh Map"): st.session_state.mv = st.session_state.get('mv', 0) + 1
-    components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.get('mv', 0)}", height=800)
+    c_left, c_right = st.columns([1, 1.4])
+
+    with st.sidebar:
+        st.title("🐺 Admin Dashboard")
+        st.write(f"Logged in: **{st.session_state['current_user']}**")
+        if st.button("🔌 Log Out"): logout()
+        
+        st.divider()
+
+        # FEATURE: SECURITY AUDIT VIEW (Admins only)
+        if st.session_state['current_user'] in ["cybersorfer", "Admin"]:
+            with st.expander("🛡️ View Security Logs"):
+                try:
+                    with open("login_history.txt", "r") as f:
+                        st.text_area("Audit History", f.read(), height=200)
+                except: st.write("No logs yet.")
+
+        st.header("Nitrado FTP Manager")
+        if st.button("🔄 Sync FTP List"): fetch_ftp_logs(); st.rerun()
+
+    with c_left:
+        st.markdown("### 🛠️ Advanced Log Filtering")
+        uploaded = st.file_uploader("Browse Files", accept_multiple_files=True)
+        if uploaded:
+            mode = st.selectbox("Select Filter", ["Area Activity Search", "Full Activity per Player", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity"])
+            t_p, a_c, a_r = None, None, 500
+            if mode == "Full Activity per Player":
+                p_list = set()
+                for f in uploaded: f.seek(0); p_list.update(re.findall(r'Player "([^"]+)"', f.read().decode("utf-8", errors="ignore")))
+                t_p = st.selectbox("Select Player", sorted(list(p_list)))
+            elif mode == "Area Activity Search":
+                presets = {"NWAF": [4530, 10245], "Tisy": [1542, 13915], "Zenit": [8355, 5978], "Gorka": [9494, 8820], "VMC": [3824, 8912]}
+                choice = st.selectbox("Quick Location", list(presets.keys()))
+                a_c, a_r = presets[choice], st.slider("Radius", 50, 2000, 500)
+            if st.button("🚀 Process Logs"):
+                rep, raw = filter_v14_exact(uploaded, mode, t_p, a_c, a_r)
+                st.session_state.res_rep, st.session_state.res_raw = rep, raw
+        
+        if "res_rep" in st.session_state and st.session_state.res_rep:
+            st.download_button("💾 Download ADM", st.session_state.res_raw, "CYBER_FILTERED.adm")
+            for p, evs in st.session_state.res_rep.items():
+                with st.expander(f"👤 {p}"):
+                    for ev in evs: st.markdown(f"<div class='{ev['status']}-log'>{ev['text']}</div>", unsafe_allow_html=True)
+
+    with c_right:
+        st.markdown("### 📍 iZurvive Map")
+        if st.button("🔄 REFRESH MAP"): st.session_state.mv = st.session_state.get('mv', 0) + 1
+        components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.get('mv', 0)}", height=850, scrolling=True)
