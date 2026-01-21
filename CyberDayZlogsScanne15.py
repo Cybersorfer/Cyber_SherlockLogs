@@ -55,7 +55,7 @@ def check_password():
 if check_password():
 
     # ==============================================================================
-    # SECTION 2: GLOBAL PAGE SETUP & THEME (RESTORATION)
+    # SECTION 2: GLOBAL PAGE SETUP & THEME
     # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
 
@@ -79,7 +79,7 @@ if check_password():
         """, unsafe_allow_html=True)
 
     # ==============================================================================
-    # SECTION 3: 🐺 NITRADO FTP MANAGER (ENHANCED SELECTION)
+    # SECTION 3: 🐺 NITRADO FTP MANAGER (ENHANCED WITH TIME FILTERS)
     # ==============================================================================
     FTP_HOST, FTP_USER, FTP_PASS, FTP_PATH = "usla643.gamedata.io", "ni11109181_1", "343mhfxd", "/dayzps/config/"
 
@@ -89,7 +89,7 @@ if check_password():
             return ftp
         except: return None
 
-    def fetch_ftp_logs(f_days=None, s_dt=None, e_dt=None, s_h=0, e_h=23):
+    def fetch_ftp_logs(days_back=None, start_hour=0, end_hour=23):
         ftp = get_ftp_connection()
         if ftp:
             files_data = []
@@ -97,24 +97,30 @@ if check_password():
             processed_files = []
             valid_ext = ('.ADM', '.RPT', '.LOG')
             now = datetime.now()
+            
             for line in files_data:
                 parts = line.split(';')
                 info = {p.split('=')[0]: p.split('=')[1] for p in parts if '=' in p}
                 filename = parts[-1].strip()
                 if filename.upper().endswith(valid_ext):
                     m_time = datetime.strptime(info['modify'], "%Y%m%d%H%M%S")
+                    
+                    # Filtering Logic
                     keep = True
-                    if f_days and m_time < (now - timedelta(days=f_days)): keep = False
-                    elif s_dt and e_dt and not (s_dt <= m_time.date() <= e_dt): keep = False
-                    if not (s_h <= m_time.hour <= e_h): keep = False
+                    if days_back and m_time < (now - timedelta(days=days_back)):
+                        keep = False
+                    if not (start_hour <= m_time.hour <= end_hour):
+                        keep = False
+                        
                     if keep:
                         d_name = f"{filename} ({m_time.strftime('%m/%d %H:%M')})"
                         processed_files.append({"real": filename, "display": d_name, "time": m_time})
+            
             st.session_state.all_logs = sorted(processed_files, key=lambda x: x['time'], reverse=True)
             ftp.quit()
 
     # ==============================================================================
-    # SECTION 4: CORE LOGIC FUNCTIONS (EXACT RESTORATION)
+    # SECTION 4: CORE FUNCTIONS (RESTORED AREA SEARCH LOGIC)
     # ==============================================================================
     def make_izurvive_link(coords):
         if coords and len(coords) >= 2:
@@ -129,7 +135,6 @@ if check_password():
             if "pos=<" in line:
                 raw = line.split("pos=<")[1].split(">")[0]
                 parts = [p.strip() for p in raw.split(",")]
-                # RESTORED: Horizontal plane X and Y (Index 0 and 1)
                 coords = [float(parts[0]), float(parts[1])] 
         except: pass 
         return str(name), coords
@@ -218,7 +223,15 @@ if check_password():
                 except: st.write("No logs yet.")
 
         st.header("Nitrado FTP Manager")
-        if st.button("🔄 Sync FTP List"): fetch_ftp_logs(); st.rerun()
+        
+        # FEATURE: Days and Hours Filter
+        days_opt = {"Today": 0, "Last 24h": 1, "2 Days": 2, "3 Days": 3, "1 Week": 7, "All Time": None}
+        sel_days = st.selectbox("Search Range:", list(days_opt.keys()))
+        hr_range = st.slider("Hour Frame (24h)", 0, 23, (0, 23))
+        
+        if st.button("🔄 Sync FTP List"): 
+            fetch_ftp_logs(days_opt[sel_days], hr_range[0], hr_range[1])
+            st.rerun()
         
         if 'all_logs' in st.session_state:
             st.subheader("Filter File Types:")
@@ -266,7 +279,6 @@ if check_password():
                     all_names.extend([l.split('"')[1] for l in f.read().decode("utf-8", errors="ignore").splitlines() if 'Player "' in l])
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
             elif mode == "Area Activity Search":
-                # RESTORED PRESETS: Exact from your working version
                 presets = {
                     "Custom Coordinates": None,
                     "Tisy Military": [1542.0, 13915.0],
