@@ -55,7 +55,7 @@ def check_password():
 if check_password():
 
     # ==============================================================================
-    # SECTION 2: GLOBAL PAGE SETUP & THEME (RESTORATION)
+    # SECTION 2: GLOBAL PAGE SETUP & THEME
     # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
 
@@ -79,7 +79,7 @@ if check_password():
         """, unsafe_allow_html=True)
 
     # ==============================================================================
-    # SECTION 3: 🐺 NITRADO FTP MANAGER (RESTORATION)
+    # SECTION 3: 🐺 NITRADO FTP MANAGER
     # ==============================================================================
     FTP_HOST, FTP_USER, FTP_PASS, FTP_PATH = "usla643.gamedata.io", "ni11109181_1", "343mhfxd", "/dayzps/config/"
 
@@ -114,78 +114,95 @@ if check_password():
             ftp.quit()
 
     # ==============================================================================
-    # SECTION 4: 🛠️ ADVANCED LOG FILTERING (RESTORED AREA SEARCH)
+    # SECTION 4: CORE FUNCTIONS (RESTORED LOGIC)
     # ==============================================================================
-    def extract_v14_data(line):
-        name, coords = "System", None
+    def make_izurvive_link(coords):
+        if coords and len(coords) >= 2:
+            return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
+        return ""
+
+    def extract_player_and_coords(line):
+        name, coords = "System/Server", None
         try:
-            if 'Player "' in line: name = line.split('Player "')[1].split('"')[0]
+            if 'Player "' in line: 
+                name = line.split('Player "')[1].split('"')[0]
             if "pos=<" in line:
                 raw = line.split("pos=<")[1].split(">")[0]
-                pts = [p.strip() for p in raw.split(",")]
-                # Horizontal plane: X (pts[0]) and Z (pts[2])
-                coords = [float(pts[0]), float(pts[2])] 
-        except: pass
-        return name, coords
+                parts = [p.strip() for p in raw.split(",")]
+                # Restored horizontal logic: Index 0 (X) and Index 2 (Z)
+                coords = [float(parts[0]), float(parts[2])] 
+        except: pass 
+        return str(name), coords
 
     def calculate_distance(p1, p2):
         if not p1 or not p2: return 999999
         return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
-    def filter_v14_exact(files, mode, target_p=None, area_c=None, area_r=500):
-        report, raw_lines = {}, []
-        all_content, first_ts = [], "00:00:00"
-        for f in files:
-            f.seek(0)
-            content = f.read().decode("utf-8", errors="ignore")
-            all_content.extend(content.splitlines())
-            if first_ts == "00:00:00":
-                t_match = re.search(r'(\d{2}:\d{2}:\d{2})', content)
-                if t_match: first_ts = t_match.group(1)
-        header = f"******************************************************************************\nAdminLog started on {datetime.now().strftime('%Y-%m-%d')} at {first_ts}\n\n"
-        
-        build_k = ["placed", "built", "built base", "built wall", "built gate", "built platform"]
-        raid_k = ["dismantled", "folded", "unmount", "unmounted", "packed"]
-        sess_k = ["connected", "disconnected", "died", "killed"]
-        boost_obj = ["fence kit", "nameless object", "fireplace", "garden plot"]
-        boost_track = {}
+    # ==============================================================================
+    # SECTION 5: 🛠️ ADVANCED LOG FILTERING (EXACT SYNC)
+    # ==============================================================================
+    def filter_logs(files, mode, target_player=None, area_coords=None, area_radius=500):
+        grouped_report, boosting_tracker = {}, {}
+        raw_filtered_lines = []
+        header = "******************************************************************************\nAdminLog started on 2026-01-19 at 08:43:52\n\n"
 
-        for line in all_content:
+        all_lines = []
+        for uploaded_file in files:
+            uploaded_file.seek(0)
+            content = uploaded_file.read().decode("utf-8", errors="ignore")
+            all_lines.extend(content.splitlines())
+
+        building_keys = ["placed", "built", "built base", "built wall", "built gate", "built platform"]
+        raid_keys = ["dismantled", "folded", "unmount", "unmounted", "packed"]
+        session_keys = ["connected", "disconnected", "died", "killed"]
+        boosting_objects = ["fence kit", "nameless object", "fireplace", "garden plot", "barrel"]
+
+        for line in all_lines:
             if "|" not in line: continue
-            name, coords = extract_v14_data(line)
-            low, match = line.lower(), False
-            
-            if mode == "Full Activity per Player": match = (target_p == name)
-            elif mode == "Area Activity Search" and coords and area_c:
-                dist = calculate_distance(coords, area_c)
-                match = (dist <= area_r)
-            elif mode == "Building Only (Global)": match = any(k in low for k in build_k) and "pos=" in low
-            elif mode == "Raid Watch (Global)": match = any(k in low for k in raid_k) and "pos=" in low
-            elif mode == "Session Tracking (Global)": match = any(k in low for k in sess_k)
-            elif mode == "Suspicious Boosting Activity" and any(k in low for k in ["placed", "built"]) and any(obj in low for obj in boost_obj):
-                t_str = line.split(" | ")[0][-8:]
-                try:
-                    t_val = datetime.strptime(t_str, "%H:%M:%S")
-                    if name not in boost_track: boost_track[name] = []
-                    boost_track[name].append({"time": t_val, "pos": coords})
-                    if len(boost_track[name]) >= 3:
-                        prev = boost_track[name][-3]
-                        if (t_val - prev["time"]).total_seconds() <= 300 and calculate_distance(coords, prev["pos"]) < 15:
-                            match = True
-                except: continue
+            time_part = line.split(" | ")[0]
+            clean_time = time_part.split("]")[-1].strip() if "]" in time_part else time_part.strip()
+            name, coords = extract_player_and_coords(line)
+            low, should_process = line.lower(), False
 
-            if match:
-                raw_lines.append(line.strip())
-                status = "connect" if "connect" in low else "disconnect" if "disconnect" in low else "death" if any(x in low for x in ["died", "killed"]) else "normal"
-                if name not in report: report[name] = []
-                report[name].append({"time": line.split(" | ")[0][-8:], "text": line.strip(), "status": status})
-        return report, header + "\n".join(raw_lines)
+            if mode == "Full Activity per Player":
+                if target_player == name: should_process = True
+            elif mode == "Building Only (Global)":
+                if any(k in low for k in building_keys) and "pos=" in low: should_process = True
+            elif mode == "Raid Watch (Global)":
+                if any(k in low for k in raid_keys) and "pos=" in low: should_process = True
+            elif mode == "Session Tracking (Global)":
+                if any(k in low for k in session_keys): should_process = True
+            elif mode == "Area Activity Search":
+                if coords and area_coords:
+                    if calculate_distance(coords, area_coords) <= area_radius: should_process = True
+            elif mode == "Suspicious Boosting Activity":
+                try: current_time = datetime.strptime(clean_time, "%H:%M:%S")
+                except: continue
+                if any(k in low for k in ["placed", "built"]) and any(obj in low for obj in boosting_objects):
+                    if name not in boosting_tracker: boosting_tracker[name] = []
+                    boosting_tracker[name].append({"time": current_time, "pos": coords})
+                    if len(boosting_tracker[name]) >= 3:
+                        prev = boosting_tracker[name][-3]
+                        if (current_time - prev["time"]).total_seconds() <= 300 and calculate_distance(coords, prev["pos"]) < 15:
+                            should_process = True
+
+            if should_process:
+                raw_filtered_lines.append(f"{line.strip()}\n") 
+                link = make_izurvive_link(coords)
+                status = "normal"
+                if any(d in low for d in ["died", "killed"]): status = "death"
+                elif "connect" in low: status = "connect"
+                event_entry = {"time": clean_time, "text": str(line.strip()), "link": link, "status": status}
+                if name not in grouped_report: grouped_report[name] = []
+                grouped_report[name].append(event_entry)
+        
+        return grouped_report, header + "\n".join(raw_filtered_lines)
 
     # ==============================================================================
-    # SECTION 5: UI LAYOUT & SIDEBAR
+    # SECTION 6: UI LAYOUT & SIDEBAR
     # ==============================================================================
     with st.sidebar:
-        st.title("🐺 Admin Dashboard")
+        st.title("🐺 Admin Console")
         st.write(f"Logged in: **{st.session_state['current_user']}**")
         if st.button("🔌 Log Out"):
             log_session(st.session_state['current_user'], "LOGOUT")
@@ -213,34 +230,42 @@ if check_password():
                             fbuf = io.BytesIO(); ftp.retrbinary(f"RETR {real}", fbuf.write); zf.writestr(real, fbuf.getvalue())
                     ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip")
 
-    c_left, c_right = st.columns([1, 1.4])
-    with c_left:
+    col1, col2 = st.columns([1, 2.3])
+    with col1:
         st.markdown("### 🛠️ Advanced Log Filtering")
-        uploaded = st.file_uploader("Browse Files", accept_multiple_files=True)
+        uploaded = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
         if uploaded:
-            mode = st.selectbox("Select Filter", ["Area Activity Search", "Full Activity per Player", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity"])
+            mode = st.selectbox("Select Filter", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity", "Area Activity Search"])
             t_p, a_c, a_r = None, None, 500
+            
             if mode == "Full Activity per Player":
-                p_list = set()
-                for f in uploaded: f.seek(0); p_list.update(re.findall(r'Player "([^"]+)"', f.read().decode("utf-8", errors="ignore")))
-                t_p = st.selectbox("Select Player", sorted(list(p_list)))
+                all_names = []
+                for f in uploaded:
+                    f.seek(0)
+                    all_names.extend([l.split('"')[1] for l in f.read().decode("utf-8", errors="ignore").splitlines() if 'Player "' in l])
+                t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
             elif mode == "Area Activity Search":
                 presets = {
-                    "NWAF": [4530, 10245], "Tisy": [1542, 13915], "Zenit": [8355, 5978], 
-                    "Gorka": [9494, 8820], "VMC": [3824, 8912], "Vybor": [3785, 8925], "Zeleno": [2575, 5175]
+                    "NWAF": [4530.0, 10245.0], "Tisy Military": [1542.0, 13915.0], 
+                    "VMC": [3824.0, 8912.0], "Vybor": [3785.0, 8925.0], "Radio Zenit": [8355.0, 5978.0],
+                    "Zelenogorsk": [2540.0, 5085.0]
                 }
                 choice = st.selectbox("Quick Location", list(presets.keys()))
-                a_c, a_r = presets[choice], st.slider("Radius", 50, 2000, 500)
-            if st.button("🚀 PROCESS UPLOADED LOGS"):
-                rep, raw = filter_v14_exact(uploaded, mode, t_p, a_c, a_r)
-                st.session_state.res_rep, st.session_state.res_raw = rep, raw
-        if "res_rep" in st.session_state and st.session_state.res_rep:
-            st.download_button("💾 Download ADM", st.session_state.res_raw, "FILTERED.adm")
-            for p, evs in st.session_state.res_rep.items():
-                with st.expander(f"👤 {p}"):
-                    for ev in evs: st.markdown(f"<div class='{ev['status']}-log'>{ev['text']}</div>", unsafe_allow_html=True)
+                a_c, a_r = presets[choice], st.slider("Radius (Meters)", 50, 2000, 500)
 
-    with c_right:
-        st.markdown("### 📍 iZurvive Map")
-        if st.button("🔄 REFRESH MAP"): st.session_state.mv = st.session_state.get('mv', 0) + 1
+            if st.button("🚀 Process Logs"):
+                rep, raw = filter_logs(uploaded, mode, t_p, a_c, a_r)
+                st.session_state.track_data = rep
+                st.session_state.raw_download = raw
+        
+        if st.session_state.get("track_data"):
+            st.download_button("💾 Download Filtered ADM", st.session_state.raw_download, "FILTERED.adm")
+            for p in sorted(st.session_state.track_data.keys()):
+                with st.expander(f"👤 {p}"):
+                    for ev in st.session_state.track_data[p]:
+                        st.markdown(f"<div class='{ev['status']}-log'>{ev['text']}</div>", unsafe_allow_html=True)
+                        if ev['link']: st.link_button("📍 Map", ev['link'])
+
+    with col2:
+        if st.button("🔄 Refresh Map"): st.session_state.mv = st.session_state.get('mv', 0) + 1
         components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.get('mv', 0)}", height=850, scrolling=True)
