@@ -24,8 +24,11 @@ def log_session(user, action):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     ip = st.context.headers.get("X-Forwarded-For", "Unknown/Local")
     entry = f"{now} | User: {user} | Action: {action} | IP: {ip}\n"
-    with open("login_history.txt", "a") as f:
-        f.write(entry)
+    try:
+        with open("login_history.txt", "a") as f:
+            f.write(entry)
+    except:
+        pass
 
 def check_password():
     if "password_correct" not in st.session_state:
@@ -52,7 +55,6 @@ if check_password():
     # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
     
-    # Initialize Persistent Map State
     if 'mv' not in st.session_state: st.session_state.mv = 0
     if 'track_data' not in st.session_state: st.session_state.track_data = None
     if 'map_click_x' not in st.session_state: st.session_state.map_click_x = 1542.0
@@ -60,11 +62,19 @@ if check_password():
 
     st.markdown("""
         <style>
+        /* Night Theme */
         .stApp { background-color: #0d1117; color: #8b949e !important; }
         section[data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d; }
+        
+        /* Gray Text Contrast */
         .stMarkdown, p, label, .stSubheader, .stHeader, h1, h2, h3, h4, span { color: #8b949e !important; }
+        
+        /* Tactical Night Buttons */
         div.stButton > button { color: #c9d1d9 !important; background-color: #21262d !important; border: 1px solid #30363d !important; font-weight: bold !important; border-radius: 6px; }
+        
+        /* Logs Styling */
         .death-log { color: #ff7b72 !important; font-weight: bold; border-left: 3px solid #f85149; padding-left: 10px; margin-bottom: 5px;}
+        .connect-log { color: #3fb950 !important; border-left: 3px solid #3fb950; padding-left: 10px; margin-bottom: 5px;}
         .live-log { color: #79c0ff !important; font-family: monospace; font-size: 0.85rem; background: #0d1117; border: 1px solid #30363d; padding: 5px; border-radius: 4px; margin-bottom: 2px;}
         div[data-testid="stExpander"] { background-color: #161b22 !important; border: 1px solid #30363d !important; border-radius: 8px; }
         </style>
@@ -144,9 +154,10 @@ if check_password():
             st.session_state["password_correct"] = False
             st.rerun()
         c_title.markdown("### 🐺 Admin")
-        st.write(f"User: **{st.session_state['current_user']}**")
+        st.write(f"Active User: **{st.session_state.get('current_user', 'cybersorfer')}**")
         st.divider()
 
+        # Dual Live Ticking Clocks
         dual_clocks_html = """
         <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
             <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
@@ -263,7 +274,6 @@ if check_password():
                     all_names.extend([l.split('"')[1] for l in f.read().decode("utf-8", errors="ignore").splitlines() if 'Player "' in l])
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
             elif mode == "Area Activity Search":
-                # COORDINATE AUTO-UPDATER WITH SESSION STATE
                 cx = st.number_input("Center X", value=st.session_state.map_click_x, key="input_x")
                 cy = st.number_input("Center Y", value=st.session_state.map_click_y, key="input_y")
                 area_coords = [cx, cy]; area_radius = st.slider("Search Radius", 50, 2000, 500)
@@ -285,34 +295,26 @@ if check_password():
     with col2:
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
         
-        # IMPROVED BRIDGE: Listen for coordinate messages from the map
-        map_bridge_js = """
-        <script>
-        window.addEventListener('message', function(event) {
-            // Listen for map location data (simulated by clicking map elements)
-            if (event.data && event.data.type === 'map_click') {
-                window.parent.postMessage({
-                    type: 'streamlit:setComponentValue',
-                    value: {x: event.data.x, y: event.data.y}
-                }, '*');
-            }
-        }, false);
-        </script>
+        # PERSISTENT COORDINATE CAPTURE (IFRAME BRIDGE)
+        bridge_html = """
+            <script>
+            window.addEventListener('message', function(event) {
+                if (event.data.type === 'setCoords') {
+                    window.parent.postMessage({
+                        type: 'streamlit:setComponentValue', 
+                        value: {x: event.data.x, y: event.data.y}
+                    }, '*');
+                }
+            });
+            </script>
         """
-        # Capture the data back into Streamlit session state
-        clicked_data = components.html(map_bridge_js, height=0)
+        clicked_data = components.html(bridge_html, height=0)
+        
         if clicked_data:
-            st.session_state.map_click_x = clicked_data['x']
-            st.session_state.map_click_y = clicked_data['y']
+            st.session_state.map_click_x = float(clicked_data.get('x', 1542.0))
+            st.session_state.map_click_y = float(clicked_data.get('y', 13915.0))
 
         cm1, cm2, cm3 = st.columns([1, 1, 1])
         if cm2.button("🔄 Refresh Map", use_container_width=True):
             st.session_state.mv += 1; st.rerun()
         components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
-
-### How to use the Coordinate Auto-Sync:
-1.  **Right-click or Use Map Tools**: In iSurvive, when you select a location or use a measurement tool, it generates coordinates in the URL or the map's metadata.
-2.  **Auto-Fill**: The "Center X" and "Center Y" boxes will update to those numbers.
-3.  **Manual Overwrite**: You can still manually type in the boxes if you need to fine-tune the location.
-
-Would you like me to add a **"Distance Ruler"** feature that calculates the distance between any two player deaths found in your logs?
