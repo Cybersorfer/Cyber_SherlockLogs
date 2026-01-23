@@ -144,7 +144,7 @@ if check_password():
             st.session_state["password_correct"] = False
             st.rerun()
         c_title.markdown("### 🐺 Admin")
-        st.write(f"User: **{st.session_state['current_user']}**")
+        st.write(f"Active User: **{st.session_state['current_user']}**")
         st.divider()
 
         dual_clocks_html = """
@@ -191,4 +191,114 @@ if check_password():
                     if " | " not in line: continue
                     try:
                         time_str = line.split(" | ")[0].split("]")[-1].strip()
-                        l_time = datetime.strptime(time_str, "%H:%M:%S").replace(year=now_s.year, month=now_s.month, day=now_
+                        # FIXED LINE BELOW
+                        l_time = datetime.strptime(time_str, "%H:%M:%S").replace(year=now_s.year, month=now_s.month, day=now_s.day)
+                        l_time = SERVER_TZ.localize(l_time)
+                        if l_time >= hour_ago: live_events.append(line.strip())
+                    except: continue
+                return live_events[::-1] if live_events else ["No activity in last 60 mins."]
+            st.session_state.live_log_data = fetch_live_activity()
+        
+        if "live_log_data" in st.session_state:
+            with st.container(height=250):
+                for entry in st.session_state.live_log_data:
+                    st.markdown(f"<div class='live-log'>{entry}</div>", unsafe_allow_html=True)
+
+        st.divider()
+        st.header("Nitrado FTP Manager")
+        days_opt = {"Today": 0, "Last 24h": 1, "All Time": None}
+        sel_days = st.selectbox("Range:", list(days_opt.keys()))
+        cb_cols = st.columns(3)
+        show_adm = cb_cols[0].checkbox("ADM", True)
+        show_rpt = cb_cols[1].checkbox("RPT", True)
+        show_log = cb_cols[2].checkbox("LOG", True)
+        
+        if st.button("🔄 Sync FTP List", use_container_width=True): 
+            ftp = get_ftp_connection()
+            if ftp:
+                files_data = []
+                ftp.retrlines('MLSD', files_data.append)
+                processed_files = []
+                allowed = []
+                if show_adm: allowed.append(".ADM")
+                if show_rpt: allowed.append(".RPT")
+                if show_log: allowed.append(".LOG")
+                for line in files_data:
+                    parts = line.split(';')
+                    info = {p.split('=')[0]: p.split('=')[1] for p in parts if '=' in p}
+                    filename = parts[-1].strip()
+                    if filename.upper().endswith(tuple(allowed)):
+                        m_time_utc = datetime.strptime(info['modify'], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
+                        m_time = m_time_utc.astimezone(SERVER_TZ)
+                        processed_files.append({"real": filename, "display": f"{filename} ({m_time.strftime('%m/%d %H:%M')})"})
+                st.session_state.all_logs = sorted(processed_files, key=lambda x: x['real'], reverse=True)
+                ftp.quit()
+        
+        if 'all_logs' in st.session_state:
+            selected_disp = st.multiselect("Select Files:", options=[f['display'] for f in st.session_state.all_logs])
+            if selected_disp and st.button("📦 Prepare ZIP", use_container_width=True):
+                buf = io.BytesIO()
+                ftp = get_ftp_connection()
+                if ftp:
+                    with zipfile.ZipFile(buf, "w") as zf:
+                        for disp in selected_disp:
+                            real = next(f['real'] for f in st.session_state.all_logs if f['display'] == disp)
+                            fbuf = io.BytesIO(); ftp.retrbinary(f"RETR {real}", fbuf.write); zf.writestr(real, fbuf.getvalue())
+                    ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
+
+    # ==============================================================================
+    # MAIN PAGE CONTENT
+    # ==============================================================================
+    col1, col2 = st.columns([1, 2.3])
+    with col1:
+        st.markdown("### 🛠️ Advanced Log Filtering")
+        uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
+        if uploaded_files:
+            mode = st.selectbox("Select Filter", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Area Activity Search"])
+            t_p, area_coords, area_radius = None, None, 500
+            
+            if mode == "Full Activity per Player":
+                all_names = []
+                for f in uploaded_files:
+                    f.seek(0)
+                    all_names.extend([l.split('"')[1] for l in f.read().decode("utf-8", errors="ignore").splitlines() if 'Player "' in l])
+                t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
+            elif mode == "Area Activity Search":
+                cx = st.number_input("Center X", value=st.session_state.map_click_x)
+                cy = st.number_input("Center Y", value=st.session_state.map_click_y)
+                area_coords = [cx, cy]; area_radius = st.slider("Search Radius", 50, 2000, 500)
+
+            if st.button("🚀 Process Logs", use_container_width=True):
+                report, raw = filter_logs(uploaded_files, mode, t_p, area_coords, area_radius)
+                st.session_state.track_data = report
+                st.session_state.raw_download = raw
+        
+        if st.session_state.get("track_data"):
+            st.download_button("💾 Download Filtered ADM", st.session_state.raw_download, "FILTERED.adm", use_container_width=True)
+            for p in sorted(st.session_state.track_data.keys()):
+                with st.expander(f"👤 {p}"):
+                    for ev in st.session_state.track_data[p]:
+                        status_class = f"{ev['status']}-log"
+                        st.markdown(f"<div class='{status_class}'>{ev['text']}</div>", unsafe_allow_html=True)
+                        if ev['link']: st.link_button("📍 Map", ev['link'])
+
+    with col2:
+        st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
+        
+        # BRIDGE SCRIPT: Listening for iSurvive URL/State updates
+        map_bridge_js = """
+        <script>
+        window.addEventListener('message', function(event) {
+            if (event.data.type === 'izurvive_coords') {
+                const x = event.data.x; const y = event.data.y;
+                window.parent.postMessage({type: 'streamlit:setComponentValue', value: {x: x, y: y}}, '*');
+            }
+        }, false);
+        </script>
+        """
+        components.html(map_bridge_js, height=0)
+
+        cm1, cm2, cm3 = st.columns([1, 1, 1])
+        if cm2.button("🔄 Refresh Map", use_container_width=True):
+            st.session_state.mv += 1; st.rerun()
+        components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
