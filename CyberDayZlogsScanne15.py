@@ -5,6 +5,7 @@ from ftplib import FTP
 import io
 import zipfile
 import math
+import requests
 from datetime import datetime, timedelta
 import pytz 
 import streamlit.components.v1 as components
@@ -27,8 +28,7 @@ def log_session(user, action):
     try:
         with open("login_history.txt", "a") as f:
             f.write(entry)
-    except:
-        pass
+    except: pass
 
 def check_password():
     if "password_correct" not in st.session_state:
@@ -77,6 +77,8 @@ if check_password():
     # SECTION 3: CORE LOGIC & FTP
     # ==============================================================================
     FTP_HOST, FTP_USER, FTP_PASS, FTP_PATH = "usla643.gamedata.io", "ni11109181_1", "343mhfxd", "/dayzps/config/"
+    NITRADO_TOKEN = "CWBuIFx8j-KkbXDO0r6WGiBAtP_KSUiz11iQFxuB4jkU6r0wm9E9G1rcr23GuSfI8k6ldPOWseNuieSUnuV6UXPSSGzMWxzat73F"
+    NITRADO_SERVICE_ID = "18197890"
     SERVER_TZ = pytz.timezone('America/Los_Angeles')
 
     def get_ftp_connection():
@@ -147,7 +149,7 @@ if check_password():
             st.session_state["password_correct"] = False
             st.rerun()
         c_title.markdown("### 🐺 Admin")
-        st.write(f"Active User: **{st.session_state.get('current_user', 'cybersorfer')}**")
+        st.write(f"User: **{st.session_state.get('current_user', 'cybersorfer')}**")
         st.divider()
 
         dual_clocks_html = """
@@ -248,6 +250,31 @@ if check_password():
                             fbuf = io.BytesIO(); ftp.retrbinary(f"RETR {real}", fbuf.write); zf.writestr(real, fbuf.getvalue())
                     ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
 
+        st.divider()
+        # ==============================================================================
+        # NEW FEATURE: NITRADO API FILE EXPLORER
+        # ==============================================================================
+        st.header("Nitrado API Explorer")
+        api_path = st.text_input("Folder Path", value="/dayzps/")
+        
+        if st.button("🔍 Explore API Files", use_container_width=True):
+            url = f"https://api.nitrado.net/services/{NITRADO_SERVICE_ID}/gameservers/file_server/list"
+            headers = {'Authorization': f'Bearer {NITRADO_TOKEN}'}
+            params = {'dir': api_path}
+            
+            try:
+                response = requests.get(url, headers=headers, params=params)
+                if response.status_code == 200:
+                    entries = response.json().get('data', {}).get('entries', [])
+                    st.success(f"Found {len(entries)} items")
+                    for entry in entries:
+                        icon = "📁" if entry['is_dir'] else "📄"
+                        st.markdown(f"**{icon} {entry['name']}**")
+                else:
+                    st.error(f"API Error: {response.status_code}")
+            except Exception as e:
+                st.error(f"Request failed: {str(e)}")
+
     # ==============================================================================
     # MAIN PAGE CONTENT
     # ==============================================================================
@@ -266,7 +293,6 @@ if check_password():
                     all_names.extend([l.split('"')[1] for l in f.read().decode("utf-8", errors="ignore").splitlines() if 'Player "' in l])
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
             elif mode == "Area Activity Search":
-                # COORDINATE INPUTS LINKED TO SESSION STATE
                 cx = st.number_input("Center X", value=st.session_state.map_click_x, key="input_x")
                 cy = st.number_input("Center Y", value=st.session_state.map_click_y, key="input_y")
                 area_coords = [cx, cy]; area_radius = st.slider("Search Radius", 50, 2000, 500)
@@ -289,12 +315,10 @@ if check_password():
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
         
         # PERSISTENT COORDINATE CAPTURE (IFRAME BRIDGE)
-        # Using a safer way to receive coordinate data from JavaScript
         bridge_js = """
             <script>
             window.addEventListener('message', function(event) {
                 if (event.data.type === 'setCoords') {
-                    // This tells the Streamlit component to update its internal value
                     window.parent.postMessage({
                         type: 'streamlit:setComponentValue', 
                         value: JSON.stringify({x: event.data.x, y: event.data.y})
@@ -303,7 +327,6 @@ if check_password():
             });
             </script>
         """
-        # Data is received here as a JSON string
         raw_map_data = components.html(bridge_js, height=0)
         
         if raw_map_data:
