@@ -118,7 +118,6 @@ if check_password():
             uploaded_file.seek(0)
             content = uploaded_file.read().decode("utf-8", errors="ignore").splitlines()
             
-            # Capture log start header
             if not log_start_header and content:
                 for first_lines in content[:5]:
                     if "AdminLog started on" in first_lines:
@@ -161,23 +160,23 @@ if check_password():
     # SECTION 4: SIDEBAR
     # ==============================================================================
     with st.sidebar:
+        # Move Logout/Title Up
         c_logout, c_title = st.columns([1, 2])
         if c_logout.button("🔌 Out"):
             st.session_state["password_correct"] = False
             st.rerun()
         c_title.markdown("### 🐺 Admin")
-        st.write(f"User: **{st.session_state.get('current_user', 'cybersorfer')}**")
-        st.divider()
-
+        
+        # Smaller Side-by-Side Clocks
         dual_clocks_html = """
-        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
-            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
-                <div style="color: #8b949e; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">Server (LA)</div>
-                <div id="server-clock" style="color: #58a6ff; font-size: 1.4rem; font-family: monospace; font-weight: bold;">--:--:--</div>
+        <div style="display: flex; flex-direction: row; gap: 5px; margin-bottom: 5px; margin-top: -10px;">
+            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 5px; flex: 1; text-align: center;">
+                <div style="color: #8b949e; font-size: 0.55rem; font-weight: bold;">SERVER (LA)</div>
+                <div id="server-clock" style="color: #58a6ff; font-size: 0.9rem; font-family: monospace; font-weight: bold;">--:--</div>
             </div>
-            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
-                <div style="color: #8b949e; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">Device Local</div>
-                <div id="device-clock" style="color: #3fb950; font-size: 1.4rem; font-family: monospace; font-weight: bold;">--:--:--</div>
+            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 5px; flex: 1; text-align: center;">
+                <div style="color: #8b949e; font-size: 0.55rem; font-weight: bold;">DEVICE</div>
+                <div id="device-clock" style="color: #3fb950; font-size: 0.9rem; font-family: monospace; font-weight: bold;">--:--</div>
             </div>
         </div>
         <script>
@@ -191,17 +190,25 @@ if check_password():
         setInterval(updateClocks, 1000); updateClocks();
         </script>
         """
-        components.html(dual_clocks_html, height=155)
+        components.html(dual_clocks_html, height=60)
+        st.write(f"User: **{st.session_state.get('current_user', 'cybersorfer')}**")
 
-        # Locked Features (kept in code)
-        if False:
+        if False: # Hidden Live Activity
             st.subheader("🔥 Live Activity (1hr)")
-            # ... (original live log logic remains)
-        
+
         st.divider()
         st.header("Nitrado FTP Manager")
-        days_opt = {"Today": 0, "Last 24h": 1, "All Time": None}
-        sel_days = st.selectbox("Range:", list(days_opt.keys()))
+        
+        # FTP Filter Range Options
+        range_mode = st.selectbox("Range:", ["Today", "Last 24h", "Time Frame (Custom)", "All Time"])
+        
+        custom_days = 0
+        custom_hrs = 0
+        if range_mode == "Time Frame (Custom)":
+            c_d, c_h = st.columns(2)
+            custom_days = c_d.number_input("Days", 0, 30, 0)
+            custom_hrs = c_h.number_input("Hours", 0, 23, 1)
+
         cb_cols = st.columns(3)
         show_adm = cb_cols[0].checkbox("ADM", True)
         show_rpt = cb_cols[1].checkbox("RPT", True)
@@ -217,15 +224,36 @@ if check_password():
                 if show_adm: allowed.append(".ADM")
                 if show_rpt: allowed.append(".RPT")
                 if show_log: allowed.append(".LOG")
+                
+                now_utc = datetime.now(pytz.UTC)
+                
                 for line in files_data:
                     parts = line.split(';')
                     info = {p.split('=')[0]: p.split('=')[1] for p in parts if '=' in p}
                     filename = parts[-1].strip()
+                    
                     if filename.upper().endswith(tuple(allowed)):
                         m_time_utc = datetime.strptime(info['modify'], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
-                        m_time = m_time_utc.astimezone(SERVER_TZ)
-                        processed_files.append({"real": filename, "display": f"{filename} ({m_time.strftime('%m/%d %H:%M')})"})
-                st.session_state.all_logs = sorted(processed_files, key=lambda x: x['real'], reverse=True)
+                        
+                        # Filtering Logic
+                        include = True
+                        if range_mode == "Today":
+                            include = m_time_utc.date() == now_utc.date()
+                        elif range_mode == "Last 24h":
+                            include = m_time_utc > (now_utc - timedelta(hours=24))
+                        elif range_mode == "Time Frame (Custom)":
+                            include = m_time_utc > (now_utc - timedelta(days=custom_days, hours=custom_hrs))
+                        
+                        if include:
+                            m_time_la = m_time_utc.astimezone(SERVER_TZ)
+                            processed_files.append({
+                                "real": filename, 
+                                "dt": m_time_utc,
+                                "display": f"{filename} ({m_time_la.strftime('%m/%d %H:%M')})"
+                            })
+                
+                # Sort by DateTime (Most recent first)
+                st.session_state.all_logs = sorted(processed_files, key=lambda x: x['dt'], reverse=True)
                 ftp.quit()
         
         if 'all_logs' in st.session_state:
@@ -240,9 +268,8 @@ if check_password():
                             fbuf = io.BytesIO(); ftp.retrbinary(f"RETR {real}", fbuf.write); zf.writestr(real, fbuf.getvalue())
                     ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
 
-        if False:
+        if False: # Hidden API Explorer
             st.header("Nitrado API Explorer")
-            # ... (original api explorer logic remains)
 
     # ==============================================================================
     # SECTION 5: MAIN CONTENT
@@ -301,7 +328,6 @@ if check_password():
     with col2:
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Serverlogs Map</h4>", unsafe_allow_html=True)
         
-        # Bridge logic for coordinate capture from map
         bridge_js = f"""
             <script>
             window.addEventListener('message', function(event) {{
@@ -317,7 +343,6 @@ if check_password():
         """
         components.html(bridge_js, height=0)
         
-        # Sync parameters to state and rerun if changed
         params = st.query_params
         if "map_x" in params and "map_y" in params:
             new_x = float(params["map_x"])
@@ -331,6 +356,4 @@ if check_password():
         if cm2.button("🔄 Refresh Map", use_container_width=True):
             st.session_state.mv += 1; st.rerun()
         
-        # Map URL specifically for iSurvive serverlogs
-        # Using ?v= to force reload and avoid cache issues
         components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
