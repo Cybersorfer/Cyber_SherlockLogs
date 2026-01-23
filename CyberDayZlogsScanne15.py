@@ -110,15 +110,16 @@ if check_password():
         return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
     def extract_dt_from_filename(filename):
-        """Extracts and fixes timestamp logic from Nitrado filenames"""
+        """Extracts and fixes timestamp logic directly from the filename string"""
         try:
-            # Matches format YYYY-MM-DD_HH-MM-SS
+            # Matches YYYY-MM-DD_HH-MM-SS
             match = re.search(r'(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})', filename)
             if match:
-                date_str = match.group(1)
-                # Replaces dashes with colons to get HH:MM:SS format
-                time_str = match.group(2).replace('-', ':')
-                return datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC)
+                date_part = match.group(1)
+                time_part = match.group(2).replace('-', ':')
+                # Parse as UTC initially as per Nitrado standard
+                dt_obj = datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC)
+                return dt_obj
         except: pass
         return None
 
@@ -208,7 +209,6 @@ if check_password():
         
         if range_mode == "Calendar & Time Range":
             d_range = st.date_input("Select Dates", value=[datetime.now().date(), datetime.now().date()])
-            # 24-hour range selector
             h_range = st.slider("Time Range (0:00 - 24:00)", 0, 24, (0, 24))
             if len(d_range) == 2:
                 f_start = datetime.combine(d_range[0], time(hour=h_range[0])).replace(tzinfo=pytz.UTC)
@@ -232,11 +232,12 @@ if check_password():
                     parts = line.split(';')
                     filename = parts[-1].strip()
                     if filename.upper().endswith(tuple(allowed)):
-                        # Uses filename timestamp logic
-                        f_dt = extract_dt_from_filename(filename)
-                        # Fallback to modify metadata if regex fails
-                        m_dt = datetime.strptime(line.split('modify=')[1].split(';')[0], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
-                        target_dt = f_dt if f_dt else m_dt
+                        target_dt = extract_dt_from_filename(filename)
+                        
+                        if not target_dt:
+                            # Fallback to modify metadata
+                            m_str = line.split('modify=')[1].split(';')[0]
+                            target_dt = datetime.strptime(m_str, "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
                         
                         include = True
                         if range_mode == "Today": include = target_dt.date() == now_utc.date()
@@ -245,8 +246,13 @@ if check_password():
                             include = f_start <= target_dt <= f_end
                         
                         if include:
-                            m_la = target_dt.astimezone(SERVER_TZ)
-                            processed_files.append({"real": filename, "dt": target_dt, "display": f"{filename} ({m_la.strftime('%H:%M:%S')})"})
+                            # Correct AM/PM display logic
+                            display_time = target_dt.strftime('%I:%M:%S %p').lower()
+                            processed_files.append({
+                                "real": filename, 
+                                "dt": target_dt, 
+                                "display": f"{filename} ({display_time})"
+                            })
                 
                 # Sorted most recent first
                 st.session_state.all_logs = sorted(processed_files, key=lambda x: x['dt'], reverse=True)
