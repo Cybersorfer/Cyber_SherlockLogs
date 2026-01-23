@@ -109,6 +109,19 @@ if check_password():
         if not p1 or not p2: return 999999
         return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
+    def extract_dt_from_filename(filename):
+        """Extracts datetime from format: DayZServer_PS4_x64_YYYY-MM-DD_HH-MM-SS.ADM"""
+        try:
+            # Look for YYYY-MM-DD_HH-MM-SS
+            match = re.search(r'(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})', filename)
+            if match:
+                date_str = match.group(1)
+                time_str = match.group(2).replace('-', ':')
+                dt_str = f"{date_str} {time_str}"
+                return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC)
+        except: pass
+        return None
+
     def filter_logs(files, mode, target_player=None, area_coords=None, area_radius=500):
         grouped_report, raw_filtered_lines = {}, []
         all_lines = []
@@ -117,7 +130,6 @@ if check_password():
         for uploaded_file in files:
             uploaded_file.seek(0)
             content = uploaded_file.read().decode("utf-8", errors="ignore").splitlines()
-            
             if not log_start_header and content:
                 for first_lines in content[:5]:
                     if "AdminLog started on" in first_lines:
@@ -149,11 +161,7 @@ if check_password():
                 if name not in grouped_report: grouped_report[name] = []
                 grouped_report[name].append(event_entry)
 
-        final_raw = ""
-        if log_start_header:
-            final_raw = f"{log_start_header}\n" + "".join(raw_filtered_lines)
-        else:
-            final_raw = "".join(raw_filtered_lines)
+        final_raw = f"{log_start_header}\n" + "".join(raw_filtered_lines) if log_start_header else "".join(raw_filtered_lines)
         return grouped_report, final_raw
 
     # ==============================================================================
@@ -166,7 +174,6 @@ if check_password():
             st.rerun()
         c_title.markdown("### 🐺 Admin")
         
-        # Bigger letters, smaller boxes for digits
         dual_clocks_html = """
         <div style="display: flex; flex-direction: row; gap: 5px; margin-bottom: 5px; margin-top: -10px;">
             <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 2px; flex: 1; text-align: center;">
@@ -195,19 +202,16 @@ if check_password():
         st.divider()
         st.header("Nitrado FTP Manager")
         
-        range_mode = st.selectbox("Range Mode:", ["Today", "Last 24h", "Calendar Range", "All Time"])
+        range_mode = st.selectbox("Range Mode:", ["Today", "Last 24h", "Calendar & Time Range", "All Time"])
         
-        filter_start = None
-        filter_end = None
+        f_start, f_end = None, None
         
-        if range_mode == "Calendar Range":
+        if range_mode == "Calendar & Time Range":
             d_range = st.date_input("Select Dates", value=[datetime.now().date(), datetime.now().date()])
             h_range = st.slider("Select Hours (0:00 - 24:00)", 0, 24, (0, 24))
-            
             if len(d_range) == 2:
-                # Combine selected date and selected hour range
-                filter_start = datetime.combine(d_range[0], time(hour=h_range[0])).replace(tzinfo=pytz.UTC)
-                filter_end = datetime.combine(d_range[1], time(hour=h_range[1] if h_range[1] < 24 else 23, minute=59)).replace(tzinfo=pytz.UTC)
+                f_start = datetime.combine(d_range[0], time(hour=h_range[0])).replace(tzinfo=pytz.UTC)
+                f_end = datetime.combine(d_range[1], time(hour=h_range[1] if h_range[1] < 24 else 23, minute=59)).replace(tzinfo=pytz.UTC)
 
         cb_cols = st.columns(3)
         show_adm = cb_cols[0].checkbox("ADM", True)
@@ -220,35 +224,28 @@ if check_password():
                 files_data = []
                 ftp.retrlines('MLSD', files_data.append)
                 processed_files = []
-                allowed = [ext for ext, show in [(".ADM", show_adm), (".RPT", show_rpt), (".LOG", show_log)] if show]
-                
+                allowed = [ext for ext, s in [(".ADM", show_adm), (".RPT", show_rpt), (".LOG", show_log)] if s]
                 now_utc = datetime.now(pytz.UTC)
                 
                 for line in files_data:
                     parts = line.split(';')
-                    info = {p.split('=')[0]: p.split('=')[1] for p in parts if '=' in p}
                     filename = parts[-1].strip()
-                    
                     if filename.upper().endswith(tuple(allowed)):
-                        m_time_utc = datetime.strptime(info['modify'], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
+                        # Use filename for timestamp, fallback to metadata
+                        f_dt = extract_dt_from_filename(filename)
+                        m_dt = datetime.strptime(line.split('modify=')[1].split(';')[0], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
+                        target_dt = f_dt if f_dt else m_dt
                         
                         include = True
-                        if range_mode == "Today":
-                            include = m_time_utc.date() == now_utc.date()
-                        elif range_mode == "Last 24h":
-                            include = m_time_utc > (now_utc - timedelta(hours=24))
-                        elif range_mode == "Calendar Range" and filter_start and filter_end:
-                            include = filter_start <= m_time_utc <= filter_end
+                        if range_mode == "Today": include = target_dt.date() == now_utc.date()
+                        elif range_mode == "Last 24h": include = target_dt > (now_utc - timedelta(hours=24))
+                        elif range_mode == "Calendar & Time Range" and f_start and f_end:
+                            include = f_start <= target_dt <= f_end
                         
                         if include:
-                            m_time_la = m_time_utc.astimezone(SERVER_TZ)
-                            processed_files.append({
-                                "real": filename, 
-                                "dt": m_time_utc,
-                                "display": f"{filename} ({m_time_la.strftime('%m/%d %H:%M')})"
-                            })
+                            m_la = target_dt.astimezone(SERVER_TZ)
+                            processed_files.append({"real": filename, "dt": target_dt, "display": f"{filename} ({m_la.strftime('%H:%M:%S')})"})
                 
-                # Sorted most recent first
                 st.session_state.all_logs = sorted(processed_files, key=lambda x: x['dt'], reverse=True)
                 ftp.quit()
         
@@ -274,79 +271,44 @@ if check_password():
         uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
         if uploaded_files:
             mode = st.selectbox("Select Filter", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Area Activity Search"])
-            
-            t_p, area_coords, area_radius = None, None, 500
-            
             if mode == "Full Activity per Player":
                 all_names = []
                 for f in uploaded_files:
                     f.seek(0)
                     all_names.extend([l.split('"')[1] for l in f.read().decode("utf-8", errors="ignore").splitlines() if 'Player "' in l])
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
-                
             elif mode == "Area Activity Search":
                 st.write("📋 **Paste from iSurvive Serverlogs Map:**")
                 raw_paste = st.text_input("e.g. 4823.45 / 6129.29", placeholder="Paste coordinates here...")
-                
                 if raw_paste:
-                    try:
-                        extracted = re.findall(r"[-+]?\d*\.\d+|\d+", raw_paste)
-                        if len(extracted) >= 2:
-                            st.session_state.map_click_x = float(extracted[0])
-                            st.session_state.map_click_y = float(extracted[1])
-                            st.success(f"Parsed: X={extracted[0]}, Y={extracted[1]}")
-                    except:
-                        st.error("Format error. Use: 'X / Y'")
-
+                    extracted = re.findall(r"[-+]?\d*\.\d+|\d+", raw_paste)
+                    if len(extracted) >= 2:
+                        st.session_state.map_click_x, st.session_state.map_click_y = float(extracted[0]), float(extracted[1])
                 cx = st.number_input("Center X", value=float(st.session_state.map_click_x), format="%.2f")
                 cy = st.number_input("Center Y", value=float(st.session_state.map_click_y), format="%.2f")
-                
-                area_coords = [cx, cy]
-                area_radius = st.slider("Search Radius (m)", 50, 2000, 500)
+                area_coords, area_radius = [cx, cy], st.slider("Search Radius (m)", 50, 2000, 500)
 
             if st.button("🚀 Process Logs", use_container_width=True):
-                report, raw = filter_logs(uploaded_files, mode, t_p, area_coords, area_radius)
-                st.session_state.track_data = report
-                st.session_state.raw_download = raw
+                report, raw = filter_logs(uploaded_files, mode, locals().get('t_p'), locals().get('area_coords'), locals().get('area_radius', 500))
+                st.session_state.track_data, st.session_state.raw_download = report, raw
         
         if st.session_state.get("track_data"):
             st.download_button("💾 Download Filtered ADM", st.session_state.raw_download, "FILTERED.adm", use_container_width=True)
             for p in sorted(st.session_state.track_data.keys()):
                 with st.expander(f"👤 {p}"):
                     for ev in st.session_state.track_data[p]:
-                        status_class = f"{ev['status']}-log"
-                        st.markdown(f"<div class='{status_class}'>{ev['text']}</div>", unsafe_allow_html=True)
+                        st.markdown(f"<div class='{ev['status']}-log'>{ev['text']}</div>", unsafe_allow_html=True)
                         if ev['link']: st.link_button("📍 Map", ev['link'])
 
     with col2:
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Serverlogs Map</h4>", unsafe_allow_html=True)
-        
-        bridge_js = f"""
-            <script>
-            window.addEventListener('message', function(event) {{
-                if (event.data && event.data.coords) {{
-                    const coords = event.data.coords;
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('map_x', coords[0]);
-                    url.searchParams.set('map_y', coords[1]);
-                    window.parent.location.href = url.href;
-                }}
-            }});
-            </script>
-        """
+        bridge_js = """<script>window.addEventListener('message', function(event) { if (event.data && event.data.coords) { const c = event.data.coords; const u = new URL(window.location.href); u.searchParams.set('map_x', c[0]); u.searchParams.set('map_y', c[1]); window.parent.location.href = u.href; } });</script>"""
         components.html(bridge_js, height=0)
-        
-        params = st.query_params
-        if "map_x" in params and "map_y" in params:
-            new_x = float(params["map_x"])
-            new_y = float(params["map_y"])
-            if new_x != st.session_state.map_click_x or new_y != st.session_state.map_click_y:
-                st.session_state.map_click_x = new_x
-                st.session_state.map_click_y = new_y
+        p = st.query_params
+        if "map_x" in p and "map_y" in p:
+            nx, ny = float(p["map_x"]), float(p["map_y"])
+            if nx != st.session_state.map_click_x or ny != st.session_state.map_click_y:
+                st.session_state.map_click_x, st.session_state.map_click_y = nx, ny
                 st.rerun()
-
-        cm1, cm2, cm3 = st.columns([1, 1, 1])
-        if cm2.button("🔄 Refresh Map", use_container_width=True):
-            st.session_state.mv += 1; st.rerun()
-        
+        if st.button("🔄 Refresh Map", use_container_width=True): st.session_state.mv += 1; st.rerun()
         components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
