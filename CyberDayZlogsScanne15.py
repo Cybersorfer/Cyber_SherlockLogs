@@ -6,10 +6,11 @@ import io
 import zipfile
 import math
 from datetime import datetime, timedelta
+import pytz 
 import streamlit.components.v1 as components
 
 # ==============================================================================
-# SECTION 1: TEAM ACCESS CONTROL & IP TRACKER (THE SHELL)
+# SECTION 1: TEAM ACCESS CONTROL & IP TRACKER
 # ==============================================================================
 team_accounts = {
     "cybersorfer": "cyber001",
@@ -49,17 +50,30 @@ def check_password():
         st.text_input("Username", key="username")
         st.text_input("Password", type="password", key="password")
         st.button("Login", on_click=password_entered)
-        if "password_correct" in st.session_state and st.session_state["username"] != "":
+        if "password_correct" in st.session_state and st.session_state.get("username") != "":
             st.error("❌ Invalid Credentials")
         return False
     return True
 
-# --- ONLY RUN CORE TOOLS IF LOGGED IN ---
 if check_password():
+    # ==============================================================================
+    # SECTION 2: AUTO-TIMEZONE DETECTION (JAVASCRIPT BRIDGE)
+    # ==============================================================================
+    # This invisible component sends your browser's timezone name to Streamlit
+    tz_code = """
+    <script>
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    window.parent.postMessage({type: 'streamlit:setComponentValue', value: timezone}, '*');
+    </script>
+    """
+    components.html(tz_code, height=0)
+    
+    # Default to Pacific if detection is in progress, otherwise use detected zone
+    detected_tz = st.session_state.get("detected_tz", "US/Pacific")
+    USER_TZ = pytz.timezone(detected_tz)
+    # Server is locked to LA (Pacific)
+    SERVER_TZ = pytz.timezone('US/Pacific')
 
-    # ==============================================================================
-    # SECTION 2: GLOBAL PAGE SETUP & THEME
-    # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
 
     st.markdown("""
@@ -95,30 +109,6 @@ if check_password():
             return ftp
         except: return None
 
-    def fetch_ftp_logs(days_back=None, start_hour=0, end_hour=23):
-        ftp = get_ftp_connection()
-        if ftp:
-            files_data = []
-            ftp.retrlines('MLSD', files_data.append)
-            processed_files = []
-            valid_ext = ('.ADM', '.RPT', '.LOG')
-            now = datetime.now()
-            
-            for line in files_data:
-                parts = line.split(';')
-                info = {p.split('=')[0]: p.split('=')[1] for p in parts if '=' in p}
-                filename = parts[-1].strip()
-                if filename.upper().endswith(valid_ext):
-                    m_time = datetime.strptime(info['modify'], "%Y%m%d%H%M%S")
-                    keep = True
-                    if days_back and m_time < (now - timedelta(days=days_back)): keep = False
-                    if not (start_hour <= m_time.hour <= end_hour): keep = False
-                    if keep:
-                        d_name = f"{filename} ({m_time.strftime('%m/%d %H:%M')})"
-                        processed_files.append({"real": filename, "display": d_name, "time": m_time})
-            st.session_state.all_logs = sorted(processed_files, key=lambda x: x['time'], reverse=True)
-            ftp.quit()
-
     def fetch_live_activity():
         ftp = get_ftp_connection()
         if not ftp: return ["Error: FTP Connection Failed"]
@@ -132,15 +122,21 @@ if check_password():
         ftp.retrbinary(f"RETR {target_file}", buf.write)
         ftp.quit()
         lines = buf.getvalue().decode("utf-8", errors="ignore").splitlines()
-        now = datetime.now()
-        hour_ago = now - timedelta(hours=1)
+        
+        # Use localized current time for filtering
+        now_server = datetime.now(SERVER_TZ)
+        hour_ago = now_server - timedelta(hours=1)
+        
         live_events = []
         for line in lines:
             if " | " not in line: continue
             try:
                 time_str = line.split(" | ")[0].split("]")[-1].strip()
-                log_time = datetime.strptime(time_str, "%H:%M:%S").replace(year=now.year, month=now.month, day=now.day)
-                if log_time >= hour_ago: live_events.append(line.strip())
+                log_time = datetime.strptime(time_str, "%H:%M:%S").replace(year=now_server.year, month=now_server.month, day=now_server.day)
+                log_time = SERVER_TZ.localize(log_time)
+                
+                if log_time >= hour_ago:
+                    live_events.append(line.strip())
             except: continue
         return live_events[::-1]
 
@@ -210,7 +206,7 @@ if check_password():
         return grouped_report, header + "\n".join(raw_filtered_lines)
 
     # ==============================================================================
-    # SECTION 6: UI LAYOUT & SIDEBAR (FIXED INDENTATION)
+    # SECTION 6: UI LAYOUT & SIDEBAR
     # ==============================================================================
     with st.sidebar:
         st.title("🐺 Admin Console")
@@ -232,15 +228,18 @@ if check_password():
                 if adm_files:
                     latest = sorted(adm_files, key=lambda x: {p.split('=')[0]: p.split('=')[1] for p in x.split(';') if '=' in p}['modify'])[-1]
                     info = {p.split('=')[0]: p.split('=')[1] for p in latest.split(';') if '=' in p}
-                    server_time = datetime.strptime(info['modify'], "%Y%m%d%H%M%S")
+                    server_time_utc = datetime.strptime(info['modify'], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
+                    server_local = server_time_utc.astimezone(SERVER_TZ)
                     ftp.quit()
-                    return server_time.strftime("%H:%M:%S")
+                    return server_local.strftime("%H:%M:%S")
             if ftp: ftp.quit()
             return "Syncing..."
 
         t_col1, t_col2 = st.columns(2)
-        t_col1.metric("Server Time", get_server_now())
-        t_col2.metric("My Time Zone", datetime.now().strftime("%H:%M:%S"))
+        t_col1.metric("Server Time (LA)", get_server_now())
+        # Automatically localized metric based on your browser's time
+        t_col2.metric("Your Local Time", datetime.now(USER_TZ).strftime("%H:%M:%S"))
+        st.caption(f"Detected Timezone: {detected_tz}")
 
         if st.button("📡 Scan Live Log"):
             st.session_state.live_log_data = fetch_live_activity()
@@ -252,23 +251,38 @@ if check_password():
 
         st.divider()
 
-        if st.session_state['current_user'] in ["cybersorfer", "Admin"]:
-            with st.expander("🛡️ Security Audit"):
-                try:
-                    with open("login_history.txt", "r") as f: st.text_area("Audit Log", f.read(), height=200)
-                except: st.write("No logs yet.")
-
         st.header("Nitrado FTP Manager")
         days_opt = {"Today": 0, "Last 24h": 1, "2 Days": 2, "3 Days": 3, "1 Week": 7, "All Time": None}
         sel_days = st.selectbox("Search Range:", list(days_opt.keys()))
         hr_range = st.slider("Hour Frame (24h)", 0, 23, (0, 23))
         
         if st.button("🔄 Sync FTP List"): 
-            fetch_ftp_logs(days_opt[sel_days], hr_range[0], hr_range[1])
-            st.rerun()
+            # Sub-function to handle internal FTP fetching with localized times
+            ftp = get_ftp_connection()
+            if ftp:
+                files_data = []
+                ftp.retrlines('MLSD', files_data.append)
+                processed_files = []
+                valid_ext = ('.ADM', '.RPT', '.LOG')
+                now = datetime.now(CALI_TZ)
+                for line in files_data:
+                    parts = line.split(';')
+                    info = {p.split('=')[0]: p.split('=')[1] for p in parts if '=' in p}
+                    filename = parts[-1].strip()
+                    if filename.upper().endswith(valid_ext):
+                        m_time_utc = datetime.strptime(info['modify'], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
+                        m_time = m_time_utc.astimezone(CALI_TZ)
+                        keep = True
+                        if days_opt[sel_days] is not None and m_time < (now - timedelta(days=days_opt[sel_days])): keep = False
+                        if not (hr_range[0] <= m_time.hour <= hr_range[1]): keep = False
+                        if keep:
+                            processed_files.append({"real": filename, "display": f"{filename} ({m_time.strftime('%m/%d %H:%M')})", "time": m_time})
+                st.session_state.all_logs = sorted(processed_files, key=lambda x: x['time'], reverse=True)
+                ftp.quit()
+                st.rerun()
         
         if 'all_logs' in st.session_state:
-            filtered_list = [f for f in st.session_state.all_logs]
+            filtered_list = st.session_state.all_logs
             selected_disp = st.multiselect("Select Files for ZIP:", options=[f['display'] for f in filtered_list])
             if selected_disp and st.button("📦 Prepare ZIP"):
                 buf = io.BytesIO()
