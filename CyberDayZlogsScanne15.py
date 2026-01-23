@@ -57,11 +57,8 @@ def check_password():
 
 if check_password():
     # ==============================================================================
-    # SECTION 2: GLOBAL CONFIG & SERVER TIMEZONE
+    # SECTION 2: GLOBAL CONFIG
     # ==============================================================================
-    # Your Nitrado Server is fixed in LA (Pacific)
-    SERVER_TZ = pytz.timezone('America/Los_Angeles')
-
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
 
     st.markdown("""
@@ -88,6 +85,7 @@ if check_password():
     # SECTION 3: 🐺 NITRADO FTP MANAGER
     # ==============================================================================
     FTP_HOST, FTP_USER, FTP_PASS, FTP_PATH = "usla643.gamedata.io", "ni11109181_1", "343mhfxd", "/dayzps/config/"
+    SERVER_TZ = pytz.timezone('America/Los_Angeles')
 
     def get_ftp_connection():
         try:
@@ -109,7 +107,6 @@ if check_password():
         ftp.quit()
         lines = buf.getvalue().decode("utf-8", errors="ignore").splitlines()
         
-        # Use localized current time for filtering logs
         now_server = datetime.now(SERVER_TZ)
         hour_ago = now_server - timedelta(hours=1)
         
@@ -125,7 +122,7 @@ if check_password():
         return live_events[::-1]
 
     # ==============================================================================
-    # SECTION 6: UI LAYOUT & SIDEBAR
+    # SECTION 6: UI LAYOUT & SIDEBAR (DUAL LIVE CLOCKS)
     # ==============================================================================
     with st.sidebar:
         st.title("🐺 Admin Console")
@@ -136,51 +133,42 @@ if check_password():
             st.rerun()
         st.divider()
 
-        st.subheader("🔥 Live activity (Past 1hr)")
+        st.subheader("🔥 Live Activity (Past 1hr)")
         
-        def get_server_now():
-            ftp = get_ftp_connection()
-            if ftp:
-                files_data = []
-                ftp.retrlines('MLSD', files_data.append)
-                adm_files = [line for line in files_data if line.split(';')[-1].strip().upper().endswith('.ADM')]
-                if adm_files:
-                    latest = sorted(adm_files, key=lambda x: {p.split('=')[0]: p.split('=')[1] for p in x.split(';') if '=' in p}['modify'])[-1]
-                    info = {p.split('=')[0]: p.split('=')[1] for p in latest.split(';') if '=' in p}
-                    server_time_utc = datetime.strptime(info['modify'], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
-                    server_local = server_time_utc.astimezone(SERVER_TZ)
-                    ftp.quit()
-                    return server_local.strftime("%H:%M:%S")
-            if ftp: ftp.quit()
-            return "--:--:--"
-
-        # SERVER TIME (Metric updates on page actions)
-        st.metric("Server Time (LA)", get_server_now())
-
-        # DEVICE LOCAL TIME (Live Ticking Clock - Automatic detection)
-        # This HTML/JS block detects the local timezone and updates the clock every second
-        live_clock_html = """
-        <div id="clock-container" style="background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 15px; text-align: center;">
-            <div style="color: #8b949e; font-size: 0.8rem; margin-bottom: 5px; font-weight: bold; text-transform: uppercase;">Device Local Time</div>
-            <div id="device-clock" style="color: #2ea043; font-size: 1.8rem; font-family: 'Courier New', monospace; font-weight: bold;">--:--:--</div>
-            <div id="tz-name" style="color: #58a6ff; font-size: 0.7rem; margin-top: 5px;">Detecting...</div>
-        </div>
-        <script>
-        function updateClock() {
-            const now = new Date();
-            // Automatically detects timezone from the device
-            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-            const options = { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
-            const timeString = new Intl.DateTimeFormat('en-GB', options).format(now);
+        # Dual Live Ticking Clocks: Server (LA) and Device (Auto)
+        dual_clocks_html = """
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="color: #8b949e; font-size: 0.75rem; margin-bottom: 3px; font-weight: bold; text-transform: uppercase;">Server Time (LA)</div>
+                <div id="server-clock" style="color: #58a6ff; font-size: 1.6rem; font-family: 'Courier New', monospace; font-weight: bold;">--:--:--</div>
+            </div>
             
-            document.getElementById('device-clock').innerText = timeString;
-            document.getElementById('tz-name').innerText = "Zone: " + tz;
+            <div style="background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 12px; text-align: center;">
+                <div style="color: #8b949e; font-size: 0.75rem; margin-bottom: 3px; font-weight: bold; text-transform: uppercase;">Device Local Time</div>
+                <div id="device-clock" style="color: #2ea043; font-size: 1.6rem; font-family: 'Courier New', monospace; font-weight: bold;">--:--:--</div>
+                <div id="device-tz" style="color: #8b949e; font-size: 0.6rem; margin-top: 2px;">Detecting...</div>
+            </div>
+        </div>
+
+        <script>
+        function updateClocks() {
+            const now = new Date();
+            
+            // Update Server Clock (Forced to LA/Pacific)
+            const serverOptions = { timeZone: 'America/Los_Angeles', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            document.getElementById('server-clock').innerText = new Intl.DateTimeFormat('en-GB', serverOptions).format(now);
+            
+            // Update Device Clock (Automatic Detection)
+            const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            const localOptions = { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            document.getElementById('device-clock').innerText = new Intl.DateTimeFormat('en-GB', localOptions).format(now);
+            document.getElementById('device-tz').innerText = "Zone: " + localTz;
         }
-        setInterval(updateClock, 1000);
-        updateClock();
+        setInterval(updateClocks, 1000);
+        updateClocks();
         </script>
         """
-        components.html(live_clock_html, height=120)
+        components.html(dual_clocks_html, height=210)
 
         if st.button("📡 Scan Live Log"):
             st.session_state.live_log_data = fetch_live_activity()
@@ -192,6 +180,4 @@ if check_password():
 
         st.divider()
         st.header("Nitrado FTP Manager")
-        # [Remaining original FTP logic here...]
-        
-        # ... (Rest of Sections 4 & 5 follow)
+        # [Remaining original FTP and Filter code follows here...]
