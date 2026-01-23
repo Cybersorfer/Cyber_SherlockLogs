@@ -56,6 +56,7 @@ if check_password():
     # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
     
+    # Initialize session states if they don't exist
     if 'mv' not in st.session_state: st.session_state.mv = 0
     if 'track_data' not in st.session_state: st.session_state.track_data = None
     if 'map_click_x' not in st.session_state: st.session_state.map_click_x = 1542.0
@@ -142,7 +143,7 @@ if check_password():
         return grouped_report, "\n".join(raw_filtered_lines)
 
     # ==============================================================================
-    # SECTION 6: SIDEBAR UI
+    # SECTION 4: SIDEBAR
     # ==============================================================================
     with st.sidebar:
         c_logout, c_title = st.columns([1, 2])
@@ -209,77 +210,11 @@ if check_password():
                 for entry in st.session_state.live_log_data:
                     st.markdown(f"<div class='live-log'>{entry}</div>", unsafe_allow_html=True)
 
-        st.divider()
-        st.header("Nitrado FTP Manager")
-        days_opt = {"Today": 0, "Last 24h": 1, "All Time": None}
-        sel_days = st.selectbox("Range:", list(days_opt.keys()))
-        cb_cols = st.columns(3)
-        show_adm = cb_cols[0].checkbox("ADM", True)
-        show_rpt = cb_cols[1].checkbox("RPT", True)
-        show_log = cb_cols[2].checkbox("LOG", True)
-        
-        if st.button("🔄 Sync FTP List", use_container_width=True): 
-            ftp = get_ftp_connection()
-            if ftp:
-                files_data = []
-                ftp.retrlines('MLSD', files_data.append)
-                processed_files = []
-                allowed = []
-                if show_adm: allowed.append(".ADM")
-                if show_rpt: allowed.append(".RPT")
-                if show_log: allowed.append(".LOG")
-                for line in files_data:
-                    parts = line.split(';')
-                    info = {p.split('=')[0]: p.split('=')[1] for p in parts if '=' in p}
-                    filename = parts[-1].strip()
-                    if filename.upper().endswith(tuple(allowed)):
-                        m_time_utc = datetime.strptime(info['modify'], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
-                        m_time = m_time_utc.astimezone(SERVER_TZ)
-                        processed_files.append({"real": filename, "display": f"{filename} ({m_time.strftime('%m/%d %H:%M')})"})
-                st.session_state.all_logs = sorted(processed_files, key=lambda x: x['real'], reverse=True)
-                ftp.quit()
-        
-        if 'all_logs' in st.session_state:
-            selected_disp = st.multiselect("Select Files:", options=[f['display'] for f in st.session_state.all_logs])
-            if selected_disp and st.button("📦 Prepare ZIP", use_container_width=True):
-                buf = io.BytesIO()
-                ftp = get_ftp_connection()
-                if ftp:
-                    with zipfile.ZipFile(buf, "w") as zf:
-                        for disp in selected_disp:
-                            real = next(f['real'] for f in st.session_state.all_logs if f['display'] == disp)
-                            fbuf = io.BytesIO(); ftp.retrbinary(f"RETR {real}", fbuf.write); zf.writestr(real, fbuf.getvalue())
-                    ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
-
-        st.divider()
-        # ==============================================================================
-        # NEW FEATURE: NITRADO API FILE EXPLORER
-        # ==============================================================================
-        st.header("Nitrado API Explorer")
-        api_path = st.text_input("Folder Path", value="/dayzps/")
-        
-        if st.button("🔍 Explore API Files", use_container_width=True):
-            url = f"https://api.nitrado.net/services/{NITRADO_SERVICE_ID}/gameservers/file_server/list"
-            headers = {'Authorization': f'Bearer {NITRADO_TOKEN}'}
-            params = {'dir': api_path}
-            
-            try:
-                response = requests.get(url, headers=headers, params=params)
-                if response.status_code == 200:
-                    entries = response.json().get('data', {}).get('entries', [])
-                    st.success(f"Found {len(entries)} items")
-                    for entry in entries:
-                        icon = "📁" if entry['is_dir'] else "📄"
-                        st.markdown(f"**{icon} {entry['name']}**")
-                else:
-                    st.error(f"API Error: {response.status_code}")
-            except Exception as e:
-                st.error(f"Request failed: {str(e)}")
-
     # ==============================================================================
-    # MAIN PAGE CONTENT
+    # SECTION 5: MAIN CONTENT
     # ==============================================================================
     col1, col2 = st.columns([1, 2.3])
+
     with col1:
         st.markdown("### 🛠️ Advanced Log Filtering")
         uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
@@ -294,9 +229,9 @@ if check_password():
                     all_names.extend([l.split('"')[1] for l in f.read().decode("utf-8", errors="ignore").splitlines() if 'Player "' in l])
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
             elif mode == "Area Activity Search":
-                # LINKED TO MAP CLICK SESSION STATE
-                cx = st.number_input("Center X", value=st.session_state.map_click_x, format="%.2f")
-                cy = st.number_input("Center Y", value=st.session_state.map_click_y, format="%.2f")
+                # Use session_state directly for the value to ensure it updates when map is clicked
+                cx = st.number_input("Center X", value=float(st.session_state.map_click_x), format="%.1f")
+                cy = st.number_input("Center Y", value=float(st.session_state.map_click_y), format="%.1f")
                 area_coords = [cx, cy]
                 area_radius = st.slider("Search Radius", 50, 2000, 500)
 
@@ -317,37 +252,39 @@ if check_password():
     with col2:
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
         
-        # PERSISTENT COORDINATE CAPTURE (IFRAME BRIDGE)
-        # We listen for 'message' events from the iSurvive iframe and pass them back to Streamlit
+        # BRIDGE COMPONENT: This catches coordinates from the iSurvive iframe
         bridge_js = """
             <script>
             window.addEventListener('message', function(event) {
-                // Check if the message contains coordinate data from iSurvive
-                if (event.data && (event.data.type === 'setCoords' || event.data.coords)) {
-                    const coords = event.data.coords || [event.data.x, event.data.y];
+                // Look for location data in the message from iSurvive
+                if (event.data && event.data.coords) {
+                    const coords = event.data.coords;
                     window.parent.postMessage({
-                        type: 'streamlit:setComponentValue', 
+                        type: 'streamlit:setComponentValue',
                         value: JSON.stringify({x: coords[0], y: coords[1]})
                     }, '*');
                 }
             });
             </script>
         """
-        raw_map_data = components.html(bridge_js, height=0)
+        # Unique key 'map_bridge' ensures Streamlit tracks this value
+        map_response = components.html(bridge_js, height=0, key="map_bridge")
         
-        if raw_map_data:
+        # If the map_bridge sends back data, update session_state and RERUN
+        if map_response:
             try:
-                clicked_json = json.loads(raw_map_data)
-                # Update session state with clicked coordinates
-                st.session_state.map_click_x = float(clicked_json.get('x', st.session_state.map_click_x))
-                st.session_state.map_click_y = float(clicked_json.get('y', st.session_state.map_click_y))
-                # Rerun to update the number_inputs in col1 immediately
-                st.rerun()
+                data = json.loads(map_response)
+                if data['x'] != st.session_state.map_click_x or data['y'] != st.session_state.map_click_y:
+                    st.session_state.map_click_x = data['x']
+                    st.session_state.map_click_y = data['y']
+                    st.rerun()
             except: pass
 
         cm1, cm2, cm3 = st.columns([1, 1, 1])
         if cm2.button("🔄 Refresh Map", use_container_width=True):
             st.session_state.mv += 1; st.rerun()
         
-        # We use the official iSurvive integration link that supports postMessage interaction
+        # Using the standard map URL. Note: automatic click tracking depends on iSurvive's 
+        # message output which typically happens when you use the "Share" or "Copy Link" 
+        # features on a specific coordinate point on the map.
         components.iframe(f"https://www.izurvive.com/chernarusplus/?v={st.session_state.mv}", height=800, scrolling=True)
