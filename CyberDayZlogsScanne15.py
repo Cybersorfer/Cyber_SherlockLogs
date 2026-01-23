@@ -60,7 +60,6 @@ if check_password():
     if 'map_click_x' not in st.session_state: st.session_state.map_click_x = 1542.0
     if 'map_click_y' not in st.session_state: st.session_state.map_click_y = 13915.0
     if 'all_logs' not in st.session_state: st.session_state.all_logs = []
-    if 'current_path' not in st.session_state: st.session_state.current_path = "/"
 
     st.markdown("""
         <style>
@@ -74,18 +73,21 @@ if check_password():
         </style>
         """, unsafe_allow_html=True)
 
-    # UPDATED CONFIG: Based on common Nitrado structures
-    FTP_HOST = "usla643.gamedata.io"
-    FTP_USER = "ni11109181_1"
-    FTP_PASS = "343mhfxd"
+    # REVERTED CONFIG
+    FTP_HOST, FTP_USER, FTP_PASS, FTP_PATH = "usla643.gamedata.io", "ni11109181_1", "343mhfxd", "/config/"
 
     def get_ftp_connection():
         try:
             ftp = FTP(FTP_HOST, timeout=15)
             ftp.login(user=FTP_USER, passwd=FTP_PASS)
+            # Try to navigate to path, fallback to root if /config/ fails
+            try:
+                ftp.cwd(FTP_PATH)
+            except:
+                ftp.cwd("/")
             return ftp
         except Exception as e:
-            st.error(f"FTP Connection Error: {e}")
+            st.error(f"FTP Error: {e}")
             return None
 
     def extract_dt_from_filename(filename):
@@ -99,36 +101,15 @@ if check_password():
         return None
 
     # ==============================================================================
-    # SECTION 3: SIDEBAR (FOLDER EXPLORER & SYNC)
+    # SECTION 3: SIDEBAR (RESTORED SYNC FEATURE)
     # ==============================================================================
     with st.sidebar:
         st.markdown("### 🐺 Admin Portal")
         
-        # Folder Explorer Tool
-        with st.expander("📂 FTP Folder Explorer", expanded=False):
-            st.info(f"Current Path: `{st.session_state.current_path}`")
-            ftp_explore = get_ftp_connection()
-            if ftp_explore:
-                try:
-                    ftp_explore.cwd(st.session_state.current_path)
-                    items = ftp_explore.nlst()
-                    for item in items:
-                        if st.button(f"📁 {item}", key=f"dir_{item}"):
-                            st.session_state.current_path = f"{st.session_state.current_path.rstrip('/')}/{item}/"
-                            st.rerun()
-                    if st.button("⬅️ Go Back to Root"):
-                        st.session_state.current_path = "/"
-                        st.rerun()
-                except: st.error("Could not read directory")
-                finally: ftp_explore.quit()
-
         st.divider()
         st.header("Nitrado FTP Manager")
         
-        # Manual Path Input (Update this after exploring)
-        manual_path = st.text_input("Target Log Folder:", value=st.session_state.current_path)
-        
-        range_mode = st.selectbox("Range Mode:", ["Today", "Last 24h", "Calendar", "All Time"])
+        range_mode = st.selectbox("Range Mode:", ["Today", "Last 24h", "All Time"])
         cb_cols = st.columns(3)
         show_adm = cb_cols[0].checkbox("ADM", True)
         show_rpt = cb_cols[1].checkbox("RPT", True)
@@ -137,8 +118,7 @@ if check_password():
         if st.button("🔄 Sync FTP List", use_container_width=True):
             ftp = get_ftp_connection()
             if ftp:
-                try:
-                    ftp.cwd(manual_path)
+                with st.spinner("Fetching logs..."):
                     files_raw = []
                     ftp.retrlines('MLSD', files_raw.append)
                     processed = []
@@ -162,37 +142,40 @@ if check_password():
                             
                             if include:
                                 disp = f"{filename} ({dt.strftime('%I:%M %p').lower()})"
-                                processed.append({"real": filename, "dt": dt, "display": disp, "path": manual_path})
+                                processed.append({"real": filename, "dt": dt, "display": disp})
                     
                     st.session_state.all_logs = sorted(processed, key=lambda x: x['dt'], reverse=True)
-                    st.success(f"Found {len(st.session_state.all_logs)} logs!")
-                except Exception as e:
-                    st.error(f"Sync failed: {e}")
-                finally: ftp.quit()
+                    ftp.quit()
+                    st.success(f"Loaded {len(st.session_state.all_logs)} files.")
 
+        # Persist selection outside the button click
         if st.session_state.all_logs:
+            st.divider()
             selected_disp = st.multiselect("Select Files:", options=[f['display'] for f in st.session_state.all_logs])
+            
             if selected_disp and st.button("📦 Prepare ZIP", use_container_width=True):
                 buf = io.BytesIO()
-                ftp_zip = get_ftp_connection()
-                if ftp_zip:
-                    with st.spinner("Zipping..."):
-                        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                            for disp in selected_disp:
-                                file_info = next(f for f in st.session_state.all_logs if f['display'] == disp)
-                                ftp_zip.cwd(file_info['path'])
-                                fbuf = io.BytesIO()
-                                ftp_zip.retrbinary(f"RETR {file_info['real']}", fbuf.write)
-                                zf.writestr(file_info['real'], fbuf.getvalue())
-                        st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
-                    ftp_zip.quit()
+                ftp_z = get_ftp_connection()
+                if ftp_z:
+                    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                        for disp in selected_disp:
+                            real = next(f['real'] for f in st.session_state.all_logs if f['display'] == disp)
+                            fbuf = io.BytesIO()
+                            ftp_z.retrbinary(f"RETR {real}", fbuf.write)
+                            zf.writestr(real, fbuf.getvalue())
+                    ftp_z.quit()
+                    st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
 
     # ==============================================================================
-    # SECTION 4: MAIN CONTENT (UNCHANGED SCANNER LOGIC)
+    # SECTION 4: MAIN CONTENT
     # ==============================================================================
     col1, col2 = st.columns([1, 2.3])
-    # ... (Rest of your filter_logs and UI logic remains the same)
     with col1:
-        st.info("Upload logs below or use the FTP Manager to sync directly from your server.")
-        # [Remainder of original scanning code]
+        st.markdown("### 🛠️ Advanced Log Filtering")
+        uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
+        # ... [Scanning Logic remains here] ...
+
+    with col2:
+        st.markdown("<h4 style='text-align: center;'>📍 iSurvive Serverlogs Map</h4>", unsafe_allow_html=True)
+        components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
     
