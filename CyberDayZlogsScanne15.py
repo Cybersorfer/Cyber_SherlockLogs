@@ -58,7 +58,6 @@ if check_password():
     
     if 'mv' not in st.session_state: st.session_state.mv = 0
     if 'track_data' not in st.session_state: st.session_state.track_data = None
-    
     if 'map_click_x' not in st.session_state: st.session_state.map_click_x = 1542.0
     if 'map_click_y' not in st.session_state: st.session_state.map_click_y = 13915.0
 
@@ -102,7 +101,7 @@ if check_password():
             if "pos=<" in line:
                 raw = line.split("pos=<")[1].split(">")[0]
                 parts = [p.strip() for p in raw.split(",")]
-                coords = [float(parts[0]), float(parts[1])] 
+                coords = [float(parts[0]), float(parts[1])]
         except: pass 
         return str(name), coords
 
@@ -120,13 +119,11 @@ if check_password():
             content = uploaded_file.read().decode("utf-8", errors="ignore").splitlines()
             
             # --- FEATURE: CAPTURE ORIGINAL LOG HEADER ---
-            # Looks for "AdminLog started on YYYY-MM-DD at HH:MM:SS"
             if not log_start_header and content:
                 for first_lines in content[:5]:
                     if "AdminLog started on" in first_lines:
                         log_start_header = first_lines.strip()
                         break
-            
             all_lines.extend(content)
 
         building_keys = ["placed", "built", "built base", "built wall", "built gate", "built platform"]
@@ -147,23 +144,154 @@ if check_password():
             elif mode == "Area Activity Search" and coords and area_coords and calculate_distance(coords, area_coords) <= area_radius: should_process = True
 
             if should_process:
-                raw_filtered_lines.append(f"{line.strip()}\n") 
+                raw_filtered_lines.append(f"{line.strip()}\n")
                 status = "death" if any(d in low for d in ["died", "killed"]) else ("connect" if "connect" in low else "normal")
                 event_entry = {"time": clean_time, "text": str(line.strip()), "link": make_izurvive_link(coords), "status": status}
                 if name not in grouped_report: grouped_report[name] = []
                 grouped_report[name].append(event_entry)
-        
-        # Prepend the captured header to the raw output
+
+        # Prepare final raw output with header
         final_raw = ""
         if log_start_header:
             final_raw = f"{log_start_header}\n" + "".join(raw_filtered_lines)
         else:
             final_raw = "".join(raw_filtered_lines)
-            
         return grouped_report, final_raw
 
     # ==============================================================================
-    # SECTION 5: MAIN CONTENT
+    # SECTION 6: SIDEBAR UI (RESTORED FTP FEATURES)
+    # ==============================================================================
+    with st.sidebar:
+        c_logout, c_title = st.columns([1, 2])
+        if c_logout.button("🔌 Out"):
+            st.session_state["password_correct"] = False
+            st.rerun()
+        c_title.markdown("### 🐺 Admin")
+        st.write(f"User: **{st.session_state.get('current_user', 'cybersorfer')}**")
+        st.divider()
+
+        dual_clocks_html = """
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
+                <div style="color: #8b949e; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">Server (LA)</div>
+                <div id="server-clock" style="color: #58a6ff; font-size: 1.4rem; font-family: monospace; font-weight: bold;">--:--:--</div>
+            </div>
+            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
+                <div style="color: #8b949e; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">Device Local</div>
+                <div id="device-clock" style="color: #3fb950; font-size: 1.4rem; font-family: monospace; font-weight: bold;">--:--:--</div>
+            </div>
+        </div>
+        <script>
+        function updateClocks() {
+            const now = new Date();
+            const sOpt = { timeZone: 'America/Los_Angeles', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            document.getElementById('server-clock').innerText = new Intl.DateTimeFormat('en-GB', sOpt).format(now);
+            const lOpt = { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            document.getElementById('device-clock').innerText = new Intl.DateTimeFormat('en-GB', lOpt).format(now);
+        }
+        setInterval(updateClocks, 1000); updateClocks();
+        </script>
+        """
+        components.html(dual_clocks_html, height=155)
+
+        st.subheader("🔥 Live Activity (1hr)")
+        if st.button("📡 Scan Live Log", use_container_width=True):
+            def fetch_live_activity_int():
+                ftp = get_ftp_connection()
+                if not ftp: return ["Error: FTP Connection Failed."]
+                files = []
+                ftp.retrlines('NLST', files.append)
+                adm_files = sorted([f for f in files if f.upper().endswith(".ADM")], reverse=True)
+                if not adm_files: return ["Error: No ADM logs found."]
+                buf = io.BytesIO()
+                ftp.retrbinary(f"RETR {adm_files[0]}", buf.write)
+                ftp.quit()
+                lines = buf.getvalue().decode("utf-8", errors="ignore").splitlines()
+                now_s = datetime.now(SERVER_TZ)
+                hour_ago = now_s - timedelta(hours=1)
+                live_events = []
+                for line in lines:
+                    if " | " not in line: continue
+                    try:
+                        time_str = line.split(" | ")[0].split("]")[-1].strip()
+                        l_time = datetime.strptime(time_str, "%H:%M:%S").replace(year=now_s.year, month=now_s.month, day=now_s.day)
+                        l_time = SERVER_TZ.localize(l_time)
+                        if l_time >= hour_ago: live_events.append(line.strip())
+                    except: continue
+                return live_events[::-1] if live_events else ["No activity in last 60 mins."]
+            st.session_state.live_log_data = fetch_live_activity_int()
+        
+        if "live_log_data" in st.session_state:
+            with st.container(height=250):
+                for entry in st.session_state.live_log_data:
+                    st.markdown(f"<div class='live-log'>{entry}</div>", unsafe_allow_html=True)
+
+        st.divider()
+        st.header("Nitrado FTP Manager")
+        days_opt = {"Today": 0, "Last 24h": 1, "All Time": None}
+        sel_days = st.selectbox("Range:", list(days_opt.keys()))
+        cb_cols = st.columns(3)
+        show_adm = cb_cols[0].checkbox("ADM", True)
+        show_rpt = cb_cols[1].checkbox("RPT", True)
+        show_log = cb_cols[2].checkbox("LOG", True)
+        
+        if st.button("🔄 Sync FTP List", use_container_width=True):
+            ftp = get_ftp_connection()
+            if ftp:
+                files_data = []
+                ftp.retrlines('MLSD', files_data.append)
+                processed_files = []
+                allowed = []
+                if show_adm: allowed.append(".ADM")
+                if show_rpt: allowed.append(".RPT")
+                if show_log: allowed.append(".LOG")
+                for line in files_data:
+                    parts = line.split(';')
+                    info = {p.split('=')[0]: p.split('=')[1] for p in parts if '=' in p}
+                    filename = parts[-1].strip()
+                    if filename.upper().endswith(tuple(allowed)):
+                        m_time_utc = datetime.strptime(info['modify'], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
+                        m_time = m_time_utc.astimezone(SERVER_TZ)
+                        processed_files.append({"real": filename, "display": f"{filename} ({m_time.strftime('%m/%d %H:%M')})"})
+                st.session_state.all_logs = sorted(processed_files, key=lambda x: x['real'], reverse=True)
+                ftp.quit()
+        
+        if 'all_logs' in st.session_state:
+            selected_disp = st.multiselect("Select Files:", options=[f['display'] for f in st.session_state.all_logs])
+            if selected_disp and st.button("📦 Prepare ZIP", use_container_width=True):
+                buf = io.BytesIO()
+                ftp = get_ftp_connection()
+                if ftp:
+                    with zipfile.ZipFile(buf, "w") as zf:
+                        for disp in selected_disp:
+                            real = next(f['real'] for f in st.session_state.all_logs if f['display'] == disp)
+                            fbuf = io.BytesIO(); ftp.retrbinary(f"RETR {real}", fbuf.write); zf.writestr(real, fbuf.getvalue())
+                    ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
+
+        st.divider()
+        st.header("Nitrado API Explorer")
+        api_path = st.text_input("Folder Path", value="/dayzps/")
+        
+        if st.button("🔍 Explore API Files", use_container_width=True):
+            url = f"https://api.nitrado.net/services/{NITRADO_SERVICE_ID}/gameservers/file_server/list"
+            headers = {'Authorization': f'Bearer {NITRADO_TOKEN}'}
+            params = {'dir': api_path}
+            
+            try:
+                response = requests.get(url, headers=headers, params=params)
+                if response.status_code == 200:
+                    entries = response.json().get('data', {}).get('entries', [])
+                    st.success(f"Found {len(entries)} items")
+                    for entry in entries:
+                        icon = "📁" if entry['is_dir'] else "📄"
+                        st.markdown(f"**{icon} {entry['name']}**")
+                else:
+                    st.error(f"API Error: {response.status_code}")
+            except Exception as e:
+                st.error(f"Request failed: {str(e)}")
+
+    # ==============================================================================
+    # MAIN PAGE CONTENT
     # ==============================================================================
     col1, col2 = st.columns([1, 2.3])
 
@@ -183,6 +311,7 @@ if check_password():
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
                 
             elif mode == "Area Activity Search":
+                # --- NEW FEATURE: COORD STRING PARSING ---
                 st.write("📋 **Paste from iSurvive Serverlogs Map:**")
                 raw_paste = st.text_input("e.g. 4823.45 / 6129.29", placeholder="Paste coordinates here...")
                 
@@ -219,6 +348,7 @@ if check_password():
     with col2:
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
         
+        # Bridge logic for clickable map coordinates
         bridge_js = f"""
             <script>
             window.addEventListener('message', function(event) {{
@@ -234,6 +364,7 @@ if check_password():
         """
         components.html(bridge_js, height=0)
         
+        # Sync URL params from bridge to session state
         params = st.query_params
         if "map_x" in params and "map_y" in params:
             new_x = float(params["map_x"])
