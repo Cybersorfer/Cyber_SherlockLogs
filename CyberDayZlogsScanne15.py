@@ -113,9 +113,21 @@ if check_password():
     def filter_logs(files, mode, target_player=None, area_coords=None, area_radius=500):
         grouped_report, raw_filtered_lines = {}, []
         all_lines = []
+        log_start_header = ""
+        
         for uploaded_file in files:
             uploaded_file.seek(0)
-            all_lines.extend(uploaded_file.read().decode("utf-8", errors="ignore").splitlines())
+            content = uploaded_file.read().decode("utf-8", errors="ignore").splitlines()
+            
+            # --- FEATURE: CAPTURE ORIGINAL LOG HEADER ---
+            # Looks for "AdminLog started on YYYY-MM-DD at HH:MM:SS"
+            if not log_start_header and content:
+                for first_lines in content[:5]:
+                    if "AdminLog started on" in first_lines:
+                        log_start_header = first_lines.strip()
+                        break
+            
+            all_lines.extend(content)
 
         building_keys = ["placed", "built", "built base", "built wall", "built gate", "built platform"]
         raid_keys = ["dismantled", "folded", "unmount", "unmounted", "packed"]
@@ -140,43 +152,15 @@ if check_password():
                 event_entry = {"time": clean_time, "text": str(line.strip()), "link": make_izurvive_link(coords), "status": status}
                 if name not in grouped_report: grouped_report[name] = []
                 grouped_report[name].append(event_entry)
-        return grouped_report, "\n".join(raw_filtered_lines)
-
-    # ==============================================================================
-    # SECTION 4: SIDEBAR
-    # ==============================================================================
-    with st.sidebar:
-        c_logout, c_title = st.columns([1, 2])
-        if c_logout.button("🔌 Out"):
-            st.session_state["password_correct"] = False
-            st.rerun()
-        c_title.markdown("### 🐺 Admin")
-        st.write(f"User: **{st.session_state.get('current_user', 'cybersorfer')}**")
-        st.divider()
-
-        dual_clocks_html = """
-        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
-            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
-                <div style="color: #8b949e; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">Server (LA)</div>
-                <div id="server-clock" style="color: #58a6ff; font-size: 1.4rem; font-family: monospace; font-weight: bold;">--:--:--</div>
-            </div>
-            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
-                <div style="color: #8b949e; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">Device Local</div>
-                <div id="device-clock" style="color: #3fb950; font-size: 1.4rem; font-family: monospace; font-weight: bold;">--:--:--</div>
-            </div>
-        </div>
-        <script>
-        function updateClocks() {
-            const now = new Date();
-            const sOpt = { timeZone: 'America/Los_Angeles', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
-            document.getElementById('server-clock').innerText = new Intl.DateTimeFormat('en-GB', sOpt).format(now);
-            const lOpt = { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' };
-            document.getElementById('device-clock').innerText = new Intl.DateTimeFormat('en-GB', lOpt).format(now);
-        }
-        setInterval(updateClocks, 1000); updateClocks();
-        </script>
-        """
-        components.html(dual_clocks_html, height=155)
+        
+        # Prepend the captured header to the raw output
+        final_raw = ""
+        if log_start_header:
+            final_raw = f"{log_start_header}\n" + "".join(raw_filtered_lines)
+        else:
+            final_raw = "".join(raw_filtered_lines)
+            
+        return grouped_report, final_raw
 
     # ==============================================================================
     # SECTION 5: MAIN CONTENT
@@ -199,13 +183,11 @@ if check_password():
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
                 
             elif mode == "Area Activity Search":
-                # --- NEW FEATURE: COORD STRING PARSING ---
                 st.write("📋 **Paste from iSurvive Serverlogs Map:**")
                 raw_paste = st.text_input("e.g. 4823.45 / 6129.29", placeholder="Paste coordinates here...")
                 
                 if raw_paste:
                     try:
-                        # Regex finds two numbers separated by / or space
                         extracted = re.findall(r"[-+]?\d*\.\d+|\d+", raw_paste)
                         if len(extracted) >= 2:
                             st.session_state.map_click_x = float(extracted[0])
@@ -214,7 +196,6 @@ if check_password():
                     except:
                         st.error("Format error. Use: 'X / Y'")
 
-                # These inputs stay synced with the pasted values
                 cx = st.number_input("Center X", value=float(st.session_state.map_click_x), format="%.2f")
                 cy = st.number_input("Center Y", value=float(st.session_state.map_click_y), format="%.2f")
                 
@@ -238,7 +219,6 @@ if check_password():
     with col2:
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
         
-        # Bridge logic for clickable map coordinates
         bridge_js = f"""
             <script>
             window.addEventListener('message', function(event) {{
@@ -254,7 +234,6 @@ if check_password():
         """
         components.html(bridge_js, height=0)
         
-        # Sync URL params from bridge to session state
         params = st.query_params
         if "map_x" in params and "map_y" in params:
             new_x = float(params["map_x"])
