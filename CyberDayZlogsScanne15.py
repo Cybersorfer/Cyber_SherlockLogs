@@ -75,6 +75,7 @@ if check_password():
         .death-log { color: #ff4b4b !important; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; margin-bottom: 5px;}
         .connect-log { color: #28a745 !important; border-left: 3px solid #28a745; padding-left: 10px; margin-bottom: 5px;}
         .disconnect-log { color: #ffc107 !important; border-left: 3px solid #ffc107; padding-left: 10px; margin-bottom: 5px;}
+        .live-log { color: #00d4ff !important; font-family: monospace; font-size: 0.85rem; background: #00000033; padding: 2px 5px; border-radius: 4px; margin-bottom: 2px;}
         </style>
         """, unsafe_allow_html=True)
 
@@ -118,6 +119,46 @@ if check_password():
             
             st.session_state.all_logs = sorted(processed_files, key=lambda x: x['time'], reverse=True)
             ftp.quit()
+
+    # ==============================================================================
+    # NEW FEATURE: LIVE ACTIVITY (PAST 1 HOUR)
+    # ==============================================================================
+    def fetch_live_activity():
+        ftp = get_ftp_connection()
+        if not ftp: return "Error: Could not connect to FTP."
+        
+        # Target the currently active ADM log
+        files = []
+        ftp.retrlines('NLST', files.append)
+        # Sort by typical naming: latest file usually starts with "server" and is at end of list
+        target_file = next((f for f in sorted(files, reverse=True) if f.endswith(".ADM")), None)
+        
+        if not target_file:
+            ftp.quit()
+            return "Error: No active log found."
+
+        buf = io.BytesIO()
+        ftp.retrbinary(f"RETR {target_file}", buf.write)
+        ftp.quit()
+        
+        lines = buf.getvalue().decode("utf-8", errors="ignore").splitlines()
+        now = datetime.now()
+        hour_ago = now - timedelta(hours=1)
+        
+        live_events = []
+        for line in lines:
+            if " | " not in line: continue
+            try:
+                # Extract time assuming HH:MM:SS format in DayZ logs
+                time_str = line.split(" | ")[0].split("]")[-1].strip()
+                log_time = datetime.strptime(time_str, "%H:%M:%S").replace(year=now.year, month=now.month, day=now.day)
+                
+                # Filter for last 60 minutes
+                if log_time >= hour_ago:
+                    live_events.append(line.strip())
+            except: continue
+        
+        return live_events[::-1] # Reverse to show newest at top
 
     # ==============================================================================
     # SECTION 4: CORE FUNCTIONS (RESTORED AREA SEARCH LOGIC)
@@ -216,6 +257,19 @@ if check_password():
             st.rerun()
         st.divider()
 
+        # LIVE 1HR ACTIVITY BOX
+        st.subheader("🔥 Live activity (Past 1hr)")
+        if st.button("📡 Scan Live Log"):
+            with st.spinner("Reaching Nitrado..."):
+                st.session_state.live_log_data = fetch_live_activity()
+        
+        if "live_log_data" in st.session_state:
+            with st.container(height=300):
+                for entry in st.session_state.live_log_data:
+                    st.markdown(f"<div class='live-log'>{entry}</div>", unsafe_allow_html=True)
+
+        st.divider()
+
         if st.session_state['current_user'] in ["cybersorfer", "Admin"]:
             with st.expander("🛡️ Security Audit"):
                 try:
@@ -224,7 +278,6 @@ if check_password():
 
         st.header("Nitrado FTP Manager")
         
-        # FEATURE: Days and Hours Filter
         days_opt = {"Today": 0, "Last 24h": 1, "2 Days": 2, "3 Days": 3, "1 Week": 7, "All Time": None}
         sel_days = st.selectbox("Search Range:", list(days_opt.keys()))
         hr_range = st.slider("Hour Frame (24h)", 0, 23, (0, 23))
@@ -314,4 +367,3 @@ if check_password():
     with col2:
         if st.button("🔄 Refresh Map"): st.session_state.mv = st.session_state.get('mv', 0) + 1
         components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.get('mv', 0)}", height=850, scrolling=True)
-
