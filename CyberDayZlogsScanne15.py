@@ -56,9 +56,10 @@ if check_password():
     # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
     
-    # Initialize session states if they don't exist
     if 'mv' not in st.session_state: st.session_state.mv = 0
     if 'track_data' not in st.session_state: st.session_state.track_data = None
+    
+    # These hold the values that the "Area Activity Search" inputs use
     if 'map_click_x' not in st.session_state: st.session_state.map_click_x = 1542.0
     if 'map_click_y' not in st.session_state: st.session_state.map_click_y = 13915.0
 
@@ -220,6 +221,7 @@ if check_password():
         uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
         if uploaded_files:
             mode = st.selectbox("Select Filter", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Area Activity Search"])
+            
             t_p, area_coords, area_radius = None, None, 500
             
             if mode == "Full Activity per Player":
@@ -228,12 +230,18 @@ if check_password():
                     f.seek(0)
                     all_names.extend([l.split('"')[1] for l in f.read().decode("utf-8", errors="ignore").splitlines() if 'Player "' in l])
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
+                
             elif mode == "Area Activity Search":
-                # Use session_state directly for the value to ensure it updates when map is clicked
-                cx = st.number_input("Center X", value=float(st.session_state.map_click_x), format="%.1f")
-                cy = st.number_input("Center Y", value=float(st.session_state.map_click_y), format="%.1f")
+                # Manual entry fields that sync with the map state
+                cx = st.number_input("Center X", value=float(st.session_state.map_click_x), format="%.1f", step=10.0)
+                cy = st.number_input("Center Y", value=float(st.session_state.map_click_y), format="%.1f", step=10.0)
+                
+                # Update global state so clicking process logs works
+                st.session_state.map_click_x = cx
+                st.session_state.map_click_y = cy
+                
                 area_coords = [cx, cy]
-                area_radius = st.slider("Search Radius", 50, 2000, 500)
+                area_radius = st.slider("Search Radius (m)", 50, 2000, 500)
 
             if st.button("🚀 Process Logs", use_container_width=True):
                 report, raw = filter_logs(uploaded_files, mode, t_p, area_coords, area_radius)
@@ -252,39 +260,39 @@ if check_password():
     with col2:
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
         
-        # BRIDGE COMPONENT: This catches coordinates from the iSurvive iframe
-        bridge_js = """
+        # UI HELPER: Instructions for the user
+        st.info("💡 To auto-fill coordinates: Click a spot on the map, then click 'Copy Link' or 'Share' in the popup.")
+
+        # FIXED BRIDGE: This version does not try to return a value to Python directly,
+        # which avoids the TypeError. Instead, it uses a Rerunt Trigger.
+        bridge_js = f"""
             <script>
-            window.addEventListener('message', function(event) {
-                // Look for location data in the message from iSurvive
-                if (event.data && event.data.coords) {
+            window.addEventListener('message', function(event) {{
+                if (event.data && event.data.coords) {{
                     const coords = event.data.coords;
-                    window.parent.postMessage({
-                        type: 'streamlit:setComponentValue',
-                        value: JSON.stringify({x: coords[0], y: coords[1]})
-                    }, '*');
-                }
-            });
+                    // We send the data back using the window URL parameters and triggering a reload
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('map_x', coords[0]);
+                    url.searchParams.set('map_y', coords[1]);
+                    window.parent.location.href = url.href;
+                }}
+            }});
             </script>
         """
-        # Unique key 'map_bridge' ensures Streamlit tracks this value
-        map_response = components.html(bridge_js, height=0, key="map_bridge")
+        components.html(bridge_js, height=0)
         
-        # If the map_bridge sends back data, update session_state and RERUN
-        if map_response:
-            try:
-                data = json.loads(map_response)
-                if data['x'] != st.session_state.map_click_x or data['y'] != st.session_state.map_click_y:
-                    st.session_state.map_click_x = data['x']
-                    st.session_state.map_click_y = data['y']
-                    st.rerun()
-            except: pass
+        # Check if URL parameters have map data (this is how we get data back from the bridge)
+        params = st.query_params
+        if "map_x" in params and "map_y" in params:
+            new_x = float(params["map_x"])
+            new_y = float(params["map_y"])
+            if new_x != st.session_state.map_click_x or new_y != st.session_state.map_click_y:
+                st.session_state.map_click_x = new_x
+                st.session_state.map_click_y = new_y
+                st.rerun()
 
         cm1, cm2, cm3 = st.columns([1, 1, 1])
         if cm2.button("🔄 Refresh Map", use_container_width=True):
             st.session_state.mv += 1; st.rerun()
         
-        # Using the standard map URL. Note: automatic click tracking depends on iSurvive's 
-        # message output which typically happens when you use the "Share" or "Copy Link" 
-        # features on a specific coordinate point on the map.
         components.iframe(f"https://www.izurvive.com/chernarusplus/?v={st.session_state.mv}", height=800, scrolling=True)
