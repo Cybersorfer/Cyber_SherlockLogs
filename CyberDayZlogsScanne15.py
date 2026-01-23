@@ -48,7 +48,7 @@ def check_password():
 
 if check_password():
     # ==============================================================================
-    # SECTION 2: GLOBAL CONFIG & NIGHT THEME (AESTHETICS ONLY)
+    # SECTION 2: GLOBAL CONFIG & NIGHT THEME (AESTHETICS)
     # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
     
@@ -58,9 +58,14 @@ if check_password():
     st.markdown("""
         <style>
         /* Night Theme Backgrounds */
-        .stApp { background-color: #0d1117; color: #c9d1d9 !important; }
+        .stApp { background-color: #0d1117; color: #8b949e !important; }
         section[data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d; }
         
+        /* Gray Contrast for Labels/Text */
+        .stMarkdown, p, label, .stSubheader, .stHeader, h1, h2, h3, h4, span { 
+            color: #8b949e !important; 
+        }
+
         /* Tactical Night Buttons */
         div.stButton > button {
             color: #c9d1d9 !important;
@@ -68,25 +73,11 @@ if check_password():
             border: 1px solid #30363d !important;
             font-weight: bold !important;
             border-radius: 6px;
-            transition: 0.2s;
-        }
-        div.stButton > button:hover {
-            border-color: #8b949e !important;
-            background-color: #30363d !important;
         }
         
-        /* Night Boxes & Containers */
-        div[data-testid="stExpander"], div.stChatMessage, .stDownloadButton > button {
-            background-color: #161b22 !important;
-            border: 1px solid #30363d !important;
-        }
-        
-        /* Custom Centering Logic */
-        .centered-btn { display: flex; justify-content: center; width: 100%; }
-
-        /* Log Colors */
+        /* Log Formatting */
         .death-log { color: #ff7b72 !important; font-weight: bold; border-left: 3px solid #f85149; padding-left: 10px; margin-bottom: 5px;}
-        .live-log { color: #79c0ff !important; font-family: monospace; font-size: 0.85rem; background: #161b22; border: 1px solid #30363d; padding: 5px; border-radius: 4px; margin-bottom: 2px;}
+        .live-log { color: #79c0ff !important; font-family: monospace; font-size: 0.85rem; background: #0d1117; border: 1px solid #30363d; padding: 5px; border-radius: 4px; margin-bottom: 2px;}
         </style>
         """, unsafe_allow_html=True)
 
@@ -134,18 +125,17 @@ if check_password():
         except: return ["Error scanning logs."]
 
     # ==============================================================================
-    # SECTION 6: UI LAYOUT & SIDEBAR (RESTORED & REPOSITIONED)
+    # SECTION 6: UI LAYOUT & SIDEBAR
     # ==============================================================================
     with st.sidebar:
-        # LOG OUT MOVED TO TOP LEFT
+        # LOG OUT TOP LEFT
         col_side_logout, col_side_title = st.columns([1, 2])
         if col_side_logout.button("🔌 Out"):
-            log_session(st.session_state['current_user'], "LOGOUT")
             st.session_state["password_correct"] = False
             st.rerun()
         col_side_title.markdown("### 🐺 Admin")
         
-        st.caption(f"Active User: {st.session_state['current_user']}")
+        st.write(f"Active User: **{st.session_state['current_user']}**")
         st.divider()
 
         # DUAL LIVE CLOCKS
@@ -184,10 +174,16 @@ if check_password():
 
         st.divider()
 
-        # RESTORED FTP MANAGER (Night Themed)
+        # RESTORED FTP MANAGER WITH CHECKBOXES
         st.header("Nitrado FTP Manager")
         days_opt = {"Today": 0, "Last 24h": 1, "3 Days": 3, "All Time": None}
         sel_days = st.selectbox("Range:", list(days_opt.keys()))
+        
+        # Restore missing checkboxes
+        cb_cols = st.columns(3)
+        show_adm = cb_cols[0].checkbox("ADM", True)
+        show_rpt = cb_cols[1].checkbox("RPT", True)
+        show_log = cb_cols[2].checkbox("LOG", True)
         
         if st.button("🔄 Sync FTP List", use_container_width=True): 
             ftp = get_ftp_connection()
@@ -196,11 +192,18 @@ if check_password():
                 ftp.retrlines('MLSD', files_data.append)
                 processed_files = []
                 now = datetime.now(SERVER_TZ)
+                
+                # Filter logic including checkboxes
+                allowed = []
+                if show_adm: allowed.append(".ADM")
+                if show_rpt: allowed.append(".RPT")
+                if show_log: allowed.append(".LOG")
+                
                 for line in files_data:
                     parts = line.split(';')
                     info = {p.split('=')[0]: p.split('=')[1] for p in parts if '=' in p}
                     filename = parts[-1].strip()
-                    if filename.upper().endswith(('.ADM', '.RPT', '.LOG')):
+                    if filename.upper().endswith(tuple(allowed)):
                         m_time_utc = datetime.strptime(info['modify'], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
                         m_time = m_time_utc.astimezone(SERVER_TZ)
                         if days_opt[sel_days] is None or m_time >= (now - timedelta(days=days_opt[sel_days])):
@@ -224,18 +227,14 @@ if check_password():
     # MAIN PAGE CONTENT
     # ==============================================================================
     col1, col2 = st.columns([1, 2.3])
-    
     with col1:
         st.markdown("### 🛠️ Advanced Log Filtering")
-        uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
+        st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
 
     with col2:
-        # CENTERED REFRESH MAP BUTTON AT TOP
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
-        
         c_map1, c_map2, c_map3 = st.columns([1, 1, 1])
         if c_map2.button("🔄 Refresh Map", use_container_width=True):
             st.session_state.mv += 1
             st.rerun()
-            
         components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
