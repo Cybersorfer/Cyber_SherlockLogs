@@ -48,7 +48,7 @@ def check_password():
 
 if check_password():
     # ==============================================================================
-    # SECTION 2: GLOBAL CONFIG & THEME
+    # SECTION 2: GLOBAL CONFIG & NIGHT THEME (AESTHETICS ONLY)
     # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
     
@@ -57,10 +57,36 @@ if check_password():
 
     st.markdown("""
         <style>
-        .stApp { background-color: #0e1117; color: #ffffff !important; }
-        section[data-testid="stSidebar"] { background-color: #1c2128 !important; border-right: 2px solid #30363d; }
-        .death-log { color: #ff4b4b !important; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; margin-bottom: 5px;}
-        .live-log { color: #00d4ff !important; font-family: monospace; font-size: 0.85rem; background: #00000033; padding: 2px 5px; border-radius: 4px; margin-bottom: 2px;}
+        /* Night Theme Backgrounds */
+        .stApp { background-color: #0d1117; color: #c9d1d9 !important; }
+        section[data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d; }
+        
+        /* Tactical Night Buttons */
+        div.stButton > button {
+            color: #c9d1d9 !important;
+            background-color: #21262d !important; 
+            border: 1px solid #30363d !important;
+            font-weight: bold !important;
+            border-radius: 6px;
+            transition: 0.2s;
+        }
+        div.stButton > button:hover {
+            border-color: #8b949e !important;
+            background-color: #30363d !important;
+        }
+        
+        /* Night Boxes & Containers */
+        div[data-testid="stExpander"], div.stChatMessage, .stDownloadButton > button {
+            background-color: #161b22 !important;
+            border: 1px solid #30363d !important;
+        }
+        
+        /* Custom Centering Logic */
+        .centered-btn { display: flex; justify-content: center; width: 100%; }
+
+        /* Log Colors */
+        .death-log { color: #ff7b72 !important; font-weight: bold; border-left: 3px solid #f85149; padding-left: 10px; margin-bottom: 5px;}
+        .live-log { color: #79c0ff !important; font-family: monospace; font-size: 0.85rem; background: #161b22; border: 1px solid #30363d; padding: 5px; border-radius: 4px; margin-bottom: 2px;}
         </style>
         """, unsafe_allow_html=True)
 
@@ -108,30 +134,30 @@ if check_password():
         except: return ["Error scanning logs."]
 
     # ==============================================================================
-    # SECTION 6: UI LAYOUT & SIDEBAR
+    # SECTION 6: UI LAYOUT & SIDEBAR (RESTORED & REPOSITIONED)
     # ==============================================================================
     with st.sidebar:
-        # LOG OUT AT THE TOP
-        col_side_1, col_side_2 = st.columns([2, 1])
-        col_side_1.title("🐺 Admin")
-        if col_side_2.button("🔌 Out"):
+        # LOG OUT MOVED TO TOP LEFT
+        col_side_logout, col_side_title = st.columns([1, 2])
+        if col_side_logout.button("🔌 Out"):
             log_session(st.session_state['current_user'], "LOGOUT")
             st.session_state["password_correct"] = False
             st.rerun()
+        col_side_title.markdown("### 🐺 Admin")
         
-        st.write(f"User: **{st.session_state['current_user']}**")
+        st.caption(f"Active User: {st.session_state['current_user']}")
         st.divider()
 
         # DUAL LIVE CLOCKS
         dual_clocks_html = """
         <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
-            <div style="background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
+            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
                 <div style="color: #8b949e; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">Server (LA)</div>
                 <div id="server-clock" style="color: #58a6ff; font-size: 1.4rem; font-family: monospace; font-weight: bold;">--:--:--</div>
             </div>
-            <div style="background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
+            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
                 <div style="color: #8b949e; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">Device Local</div>
-                <div id="device-clock" style="color: #2ea043; font-size: 1.4rem; font-family: monospace; font-weight: bold;">--:--:--</div>
+                <div id="device-clock" style="color: #3fb950; font-size: 1.4rem; font-family: monospace; font-weight: bold;">--:--:--</div>
             </div>
         </div>
         <script>
@@ -148,7 +174,7 @@ if check_password():
         components.html(dual_clocks_html, height=155)
 
         st.subheader("🔥 Live Activity (1hr)")
-        if st.button("📡 Scan Live Log"):
+        if st.button("📡 Scan Live Log", use_container_width=True):
             st.session_state.live_log_data = fetch_live_activity()
         
         if "live_log_data" in st.session_state:
@@ -158,12 +184,12 @@ if check_password():
 
         st.divider()
 
-        # RESTORED FTP MANAGER
+        # RESTORED FTP MANAGER (Night Themed)
         st.header("Nitrado FTP Manager")
         days_opt = {"Today": 0, "Last 24h": 1, "3 Days": 3, "All Time": None}
         sel_days = st.selectbox("Range:", list(days_opt.keys()))
         
-        if st.button("🔄 Sync FTP List"): 
+        if st.button("🔄 Sync FTP List", use_container_width=True): 
             ftp = get_ftp_connection()
             if ftp:
                 files_data = []
@@ -184,7 +210,7 @@ if check_password():
         
         if 'all_logs' in st.session_state:
             selected_disp = st.multiselect("Select Files:", options=[f['display'] for f in st.session_state.all_logs])
-            if selected_disp and st.button("📦 Prepare ZIP"):
+            if selected_disp and st.button("📦 Prepare ZIP", use_container_width=True):
                 buf = io.BytesIO()
                 ftp = get_ftp_connection()
                 if ftp:
@@ -192,7 +218,7 @@ if check_password():
                         for disp in selected_disp:
                             real = next(f['real'] for f in st.session_state.all_logs if f['display'] == disp)
                             fbuf = io.BytesIO(); ftp.retrbinary(f"RETR {real}", fbuf.write); zf.writestr(real, fbuf.getvalue())
-                    ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip")
+                    ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
 
     # ==============================================================================
     # MAIN PAGE CONTENT
@@ -202,13 +228,13 @@ if check_password():
     with col1:
         st.markdown("### 🛠️ Advanced Log Filtering")
         uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
-        # (Filtering logic remains here as per previous versions)
 
     with col2:
-        # REFRESH MAP BUTTON AT THE TOP
-        m_col1, m_col2 = st.columns([3, 1])
-        m_col1.markdown(f"#### 📍 iSurvive Live Map")
-        if m_col2.button("🔄 Refresh Map"):
+        # CENTERED REFRESH MAP BUTTON AT TOP
+        st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
+        
+        c_map1, c_map2, c_map3 = st.columns([1, 1, 1])
+        if c_map2.button("🔄 Refresh Map", use_container_width=True):
             st.session_state.mv += 1
             st.rerun()
             
