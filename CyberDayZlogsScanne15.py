@@ -59,7 +59,6 @@ if check_password():
     if 'mv' not in st.session_state: st.session_state.mv = 0
     if 'track_data' not in st.session_state: st.session_state.track_data = None
     
-    # These hold the values that the "Area Activity Search" inputs use
     if 'map_click_x' not in st.session_state: st.session_state.map_click_x = 1542.0
     if 'map_click_y' not in st.session_state: st.session_state.map_click_y = 13915.0
 
@@ -179,38 +178,6 @@ if check_password():
         """
         components.html(dual_clocks_html, height=155)
 
-        st.subheader("🔥 Live Activity (1hr)")
-        if st.button("📡 Scan Live Log", use_container_width=True):
-            def fetch_live_activity_int():
-                ftp = get_ftp_connection()
-                if not ftp: return ["Error: FTP Connection Failed."]
-                files = []
-                ftp.retrlines('NLST', files.append)
-                adm_files = sorted([f for f in files if f.upper().endswith(".ADM")], reverse=True)
-                if not adm_files: return ["Error: No ADM logs found."]
-                buf = io.BytesIO()
-                ftp.retrbinary(f"RETR {adm_files[0]}", buf.write)
-                ftp.quit()
-                lines = buf.getvalue().decode("utf-8", errors="ignore").splitlines()
-                now_s = datetime.now(SERVER_TZ)
-                hour_ago = now_s - timedelta(hours=1)
-                live_events = []
-                for line in lines:
-                    if " | " not in line: continue
-                    try:
-                        time_str = line.split(" | ")[0].split("]")[-1].strip()
-                        l_time = datetime.strptime(time_str, "%H:%M:%S").replace(year=now_s.year, month=now_s.month, day=now_s.day)
-                        l_time = SERVER_TZ.localize(l_time)
-                        if l_time >= hour_ago: live_events.append(line.strip())
-                    except: continue
-                return live_events[::-1] if live_events else ["No activity in last 60 mins."]
-            st.session_state.live_log_data = fetch_live_activity_int()
-        
-        if "live_log_data" in st.session_state:
-            with st.container(height=250):
-                for entry in st.session_state.live_log_data:
-                    st.markdown(f"<div class='live-log'>{entry}</div>", unsafe_allow_html=True)
-
     # ==============================================================================
     # SECTION 5: MAIN CONTENT
     # ==============================================================================
@@ -232,13 +199,24 @@ if check_password():
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
                 
             elif mode == "Area Activity Search":
-                # Manual entry fields that sync with the map state
-                cx = st.number_input("Center X", value=float(st.session_state.map_click_x), format="%.1f", step=10.0)
-                cy = st.number_input("Center Y", value=float(st.session_state.map_click_y), format="%.1f", step=10.0)
+                # --- NEW FEATURE: COORD STRING PARSING ---
+                st.write("📋 **Paste from iSurvive Serverlogs Map:**")
+                raw_paste = st.text_input("e.g. 4823.45 / 6129.29", placeholder="Paste coordinates here...")
                 
-                # Update global state so clicking process logs works
-                st.session_state.map_click_x = cx
-                st.session_state.map_click_y = cy
+                if raw_paste:
+                    try:
+                        # Regex finds two numbers separated by / or space
+                        extracted = re.findall(r"[-+]?\d*\.\d+|\d+", raw_paste)
+                        if len(extracted) >= 2:
+                            st.session_state.map_click_x = float(extracted[0])
+                            st.session_state.map_click_y = float(extracted[1])
+                            st.success(f"Parsed: X={extracted[0]}, Y={extracted[1]}")
+                    except:
+                        st.error("Format error. Use: 'X / Y'")
+
+                # These inputs stay synced with the pasted values
+                cx = st.number_input("Center X", value=float(st.session_state.map_click_x), format="%.2f")
+                cy = st.number_input("Center Y", value=float(st.session_state.map_click_y), format="%.2f")
                 
                 area_coords = [cx, cy]
                 area_radius = st.slider("Search Radius (m)", 50, 2000, 500)
@@ -260,17 +238,12 @@ if check_password():
     with col2:
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
         
-        # UI HELPER: Instructions for the user
-        st.info("💡 To auto-fill coordinates: Click a spot on the map, then click 'Copy Link' or 'Share' in the popup.")
-
-        # FIXED BRIDGE: This version does not try to return a value to Python directly,
-        # which avoids the TypeError. Instead, it uses a Rerunt Trigger.
+        # Bridge logic for clickable map coordinates
         bridge_js = f"""
             <script>
             window.addEventListener('message', function(event) {{
                 if (event.data && event.data.coords) {{
                     const coords = event.data.coords;
-                    // We send the data back using the window URL parameters and triggering a reload
                     const url = new URL(window.location.href);
                     url.searchParams.set('map_x', coords[0]);
                     url.searchParams.set('map_y', coords[1]);
@@ -281,7 +254,7 @@ if check_password():
         """
         components.html(bridge_js, height=0)
         
-        # Check if URL parameters have map data (this is how we get data back from the bridge)
+        # Sync URL params from bridge to session state
         params = st.query_params
         if "map_x" in params and "map_y" in params:
             new_x = float(params["map_x"])
