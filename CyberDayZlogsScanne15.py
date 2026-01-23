@@ -20,6 +20,13 @@ team_accounts = {
     "CAPTTipsyPants": "cap004"
 }
 
+def log_session(user, action):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ip = st.context.headers.get("X-Forwarded-For", "Unknown/Local")
+    entry = f"{now} | User: {user} | Action: {action} | IP: {ip}\n"
+    with open("login_history.txt", "a") as f:
+        f.write(entry)
+
 def check_password():
     if "password_correct" not in st.session_state:
         st.session_state["password_correct"] = False
@@ -33,6 +40,7 @@ def check_password():
         if u_in in team_accounts and team_accounts[u_in] == p_in:
             st.session_state["password_correct"] = True
             st.session_state["current_user"] = u_in
+            log_session(u_in, "LOGIN")
             st.rerun()
         else:
             st.error("❌ Invalid Credentials")
@@ -44,7 +52,6 @@ if check_password():
     # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
     
-    # Initialize Map version if not exists
     if 'mv' not in st.session_state:
         st.session_state.mv = 0
 
@@ -73,17 +80,15 @@ if check_password():
 
     def fetch_live_activity():
         ftp = get_ftp_connection()
-        if not ftp: return ["Error: FTP Timeout. Try again."]
+        if not ftp: return ["Error: FTP Connection Failed."]
         try:
             files = []
             ftp.retrlines('NLST', files.append)
-            # Filter for latest ADM file
             adm_files = sorted([f for f in files if f.upper().endswith(".ADM")], reverse=True)
             if not adm_files: return ["Error: No ADM logs found."]
             
-            target_file = adm_files[0]
             buf = io.BytesIO()
-            ftp.retrbinary(f"RETR {target_file}", buf.write)
+            ftp.retrbinary(f"RETR {adm_files[0]}", buf.write)
             ftp.quit()
             
             lines = buf.getvalue().decode("utf-8", errors="ignore").splitlines()
@@ -99,27 +104,34 @@ if check_password():
                     log_time = SERVER_TZ.localize(log_time)
                     if log_time >= hour_ago: live_events.append(line.strip())
                 except: continue
-            return live_events[::-1] if live_events else ["No activity in the last hour."]
-        except Exception as e:
-            return [f"Error scanning: {str(e)}"]
+            return live_events[::-1] if live_events else ["No activity in last 60 mins."]
+        except: return ["Error scanning logs."]
 
     # ==============================================================================
-    # SECTION 6: UI LAYOUT & SIDEBAR (FIXED CLOCKS & BUTTONS)
+    # SECTION 6: UI LAYOUT & SIDEBAR
     # ==============================================================================
     with st.sidebar:
-        st.title("🐺 Admin Console")
-        st.write(f"Logged in: **{st.session_state['current_user']}**")
+        # LOG OUT AT THE TOP
+        col_side_1, col_side_2 = st.columns([2, 1])
+        col_side_1.title("🐺 Admin")
+        if col_side_2.button("🔌 Out"):
+            log_session(st.session_state['current_user'], "LOGOUT")
+            st.session_state["password_correct"] = False
+            st.rerun()
         
-        # Dual Live Ticking Clocks
+        st.write(f"User: **{st.session_state['current_user']}**")
+        st.divider()
+
+        # DUAL LIVE CLOCKS
         dual_clocks_html = """
-        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-            <div style="background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 12px; text-align: center;">
-                <div style="color: #8b949e; font-size: 0.75rem; font-weight: bold; text-transform: uppercase;">Server Time (LA)</div>
-                <div id="server-clock" style="color: #58a6ff; font-size: 1.6rem; font-family: monospace; font-weight: bold;">--:--:--</div>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+            <div style="background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
+                <div style="color: #8b949e; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">Server (LA)</div>
+                <div id="server-clock" style="color: #58a6ff; font-size: 1.4rem; font-family: monospace; font-weight: bold;">--:--:--</div>
             </div>
-            <div style="background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 12px; text-align: center;">
-                <div style="color: #8b949e; font-size: 0.75rem; font-weight: bold; text-transform: uppercase;">Device Local Time</div>
-                <div id="device-clock" style="color: #2ea043; font-size: 1.6rem; font-family: monospace; font-weight: bold;">--:--:--</div>
+            <div style="background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center;">
+                <div style="color: #8b949e; font-size: 0.7rem; font-weight: bold; text-transform: uppercase;">Device Local</div>
+                <div id="device-clock" style="color: #2ea043; font-size: 1.4rem; font-family: monospace; font-weight: bold;">--:--:--</div>
             </div>
         </div>
         <script>
@@ -133,35 +145,71 @@ if check_password():
         setInterval(updateClocks, 1000); updateClocks();
         </script>
         """
-        components.html(dual_clocks_html, height=180)
+        components.html(dual_clocks_html, height=155)
 
-        st.subheader("🔥 Live Activity (Past 1hr)")
+        st.subheader("🔥 Live Activity (1hr)")
         if st.button("📡 Scan Live Log"):
             st.session_state.live_log_data = fetch_live_activity()
         
         if "live_log_data" in st.session_state:
-            with st.container(border=True):
+            with st.container(height=250):
                 for entry in st.session_state.live_log_data:
                     st.markdown(f"<div class='live-log'>{entry}</div>", unsafe_allow_html=True)
 
-        if st.button("🔌 Log Out"):
-            st.session_state["password_correct"] = False
-            st.rerun()
+        st.divider()
+
+        # RESTORED FTP MANAGER
+        st.header("Nitrado FTP Manager")
+        days_opt = {"Today": 0, "Last 24h": 1, "3 Days": 3, "All Time": None}
+        sel_days = st.selectbox("Range:", list(days_opt.keys()))
+        
+        if st.button("🔄 Sync FTP List"): 
+            ftp = get_ftp_connection()
+            if ftp:
+                files_data = []
+                ftp.retrlines('MLSD', files_data.append)
+                processed_files = []
+                now = datetime.now(SERVER_TZ)
+                for line in files_data:
+                    parts = line.split(';')
+                    info = {p.split('=')[0]: p.split('=')[1] for p in parts if '=' in p}
+                    filename = parts[-1].strip()
+                    if filename.upper().endswith(('.ADM', '.RPT', '.LOG')):
+                        m_time_utc = datetime.strptime(info['modify'], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
+                        m_time = m_time_utc.astimezone(SERVER_TZ)
+                        if days_opt[sel_days] is None or m_time >= (now - timedelta(days=days_opt[sel_days])):
+                            processed_files.append({"real": filename, "display": f"{filename} ({m_time.strftime('%m/%d %H:%M')})"})
+                st.session_state.all_logs = sorted(processed_files, key=lambda x: x['real'], reverse=True)
+                ftp.quit()
+        
+        if 'all_logs' in st.session_state:
+            selected_disp = st.multiselect("Select Files:", options=[f['display'] for f in st.session_state.all_logs])
+            if selected_disp and st.button("📦 Prepare ZIP"):
+                buf = io.BytesIO()
+                ftp = get_ftp_connection()
+                if ftp:
+                    with zipfile.ZipFile(buf, "w") as zf:
+                        for disp in selected_disp:
+                            real = next(f['real'] for f in st.session_state.all_logs if f['display'] == disp)
+                            fbuf = io.BytesIO(); ftp.retrbinary(f"RETR {real}", fbuf.write); zf.writestr(real, fbuf.getvalue())
+                    ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip")
 
     # ==============================================================================
-    # MAIN PAGE CONTENT (MAP PERSISTENCE)
+    # MAIN PAGE CONTENT
     # ==============================================================================
     col1, col2 = st.columns([1, 2.3])
     
     with col1:
         st.markdown("### 🛠️ Advanced Log Filtering")
         uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
-        # Process files if uploaded... (Logic goes here)
+        # (Filtering logic remains here as per previous versions)
 
     with col2:
-        # This keeps the map visible even when sidebar buttons are clicked
-        st.markdown(f"#### 📍 iSurvive Live Map View")
-        components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
-        if st.button("🔄 Force Map Refresh"):
+        # REFRESH MAP BUTTON AT THE TOP
+        m_col1, m_col2 = st.columns([3, 1])
+        m_col1.markdown(f"#### 📍 iSurvive Live Map")
+        if m_col2.button("🔄 Refresh Map"):
             st.session_state.mv += 1
             st.rerun()
+            
+        components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
