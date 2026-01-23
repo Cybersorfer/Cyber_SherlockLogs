@@ -9,6 +9,7 @@ import requests
 from datetime import datetime, timedelta
 import pytz 
 import streamlit.components.v1 as components
+import json
 
 # ==============================================================================
 # SECTION 1: TEAM ACCESS CONTROL
@@ -293,9 +294,11 @@ if check_password():
                     all_names.extend([l.split('"')[1] for l in f.read().decode("utf-8", errors="ignore").splitlines() if 'Player "' in l])
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
             elif mode == "Area Activity Search":
-                cx = st.number_input("Center X", value=st.session_state.map_click_x, key="input_x")
-                cy = st.number_input("Center Y", value=st.session_state.map_click_y, key="input_y")
-                area_coords = [cx, cy]; area_radius = st.slider("Search Radius", 50, 2000, 500)
+                # LINKED TO MAP CLICK SESSION STATE
+                cx = st.number_input("Center X", value=st.session_state.map_click_x, format="%.2f")
+                cy = st.number_input("Center Y", value=st.session_state.map_click_y, format="%.2f")
+                area_coords = [cx, cy]
+                area_radius = st.slider("Search Radius", 50, 2000, 500)
 
             if st.button("🚀 Process Logs", use_container_width=True):
                 report, raw = filter_logs(uploaded_files, mode, t_p, area_coords, area_radius)
@@ -315,13 +318,16 @@ if check_password():
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
         
         # PERSISTENT COORDINATE CAPTURE (IFRAME BRIDGE)
+        # We listen for 'message' events from the iSurvive iframe and pass them back to Streamlit
         bridge_js = """
             <script>
             window.addEventListener('message', function(event) {
-                if (event.data.type === 'setCoords') {
+                // Check if the message contains coordinate data from iSurvive
+                if (event.data && (event.data.type === 'setCoords' || event.data.coords)) {
+                    const coords = event.data.coords || [event.data.x, event.data.y];
                     window.parent.postMessage({
                         type: 'streamlit:setComponentValue', 
-                        value: JSON.stringify({x: event.data.x, y: event.data.y})
+                        value: JSON.stringify({x: coords[0], y: coords[1]})
                     }, '*');
                 }
             });
@@ -330,14 +336,18 @@ if check_password():
         raw_map_data = components.html(bridge_js, height=0)
         
         if raw_map_data:
-            import json
             try:
                 clicked_json = json.loads(raw_map_data)
-                st.session_state.map_click_x = float(clicked_json.get('x', 1542.0))
-                st.session_state.map_click_y = float(clicked_json.get('y', 13915.0))
+                # Update session state with clicked coordinates
+                st.session_state.map_click_x = float(clicked_json.get('x', st.session_state.map_click_x))
+                st.session_state.map_click_y = float(clicked_json.get('y', st.session_state.map_click_y))
+                # Rerun to update the number_inputs in col1 immediately
+                st.rerun()
             except: pass
 
         cm1, cm2, cm3 = st.columns([1, 1, 1])
         if cm2.button("🔄 Refresh Map", use_container_width=True):
             st.session_state.mv += 1; st.rerun()
-        components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
+        
+        # We use the official iSurvive integration link that supports postMessage interaction
+        components.iframe(f"https://www.izurvive.com/chernarusplus/?v={st.session_state.mv}", height=800, scrolling=True)
