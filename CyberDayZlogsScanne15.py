@@ -159,7 +159,7 @@ if check_password():
         return grouped_report, final_raw
 
     # ==============================================================================
-    # SECTION 6: SIDEBAR UI (RESTORED FTP FEATURES)
+    # SECTION 6: SIDEBAR UI
     # ==============================================================================
     with st.sidebar:
         c_logout, c_title = st.columns([1, 2])
@@ -194,37 +194,39 @@ if check_password():
         """
         components.html(dual_clocks_html, height=155)
 
-        st.subheader("🔥 Live Activity (1hr)")
-        if st.button("📡 Scan Live Log", use_container_width=True):
-            def fetch_live_activity_int():
-                ftp = get_ftp_connection()
-                if not ftp: return ["Error: FTP Connection Failed."]
-                files = []
-                ftp.retrlines('NLST', files.append)
-                adm_files = sorted([f for f in files if f.upper().endswith(".ADM")], reverse=True)
-                if not adm_files: return ["Error: No ADM logs found."]
-                buf = io.BytesIO()
-                ftp.retrbinary(f"RETR {adm_files[0]}", buf.write)
-                ftp.quit()
-                lines = buf.getvalue().decode("utf-8", errors="ignore").splitlines()
-                now_s = datetime.now(SERVER_TZ)
-                hour_ago = now_s - timedelta(hours=1)
-                live_events = []
-                for line in lines:
-                    if " | " not in line: continue
-                    try:
-                        time_str = line.split(" | ")[0].split("]")[-1].strip()
-                        l_time = datetime.strptime(time_str, "%H:%M:%S").replace(year=now_s.year, month=now_s.month, day=now_s.day)
-                        l_time = SERVER_TZ.localize(l_time)
-                        if l_time >= hour_ago: live_events.append(line.strip())
-                    except: continue
-                return live_events[::-1] if live_events else ["No activity in last 60 mins."]
-            st.session_state.live_log_data = fetch_live_activity_int()
-        
-        if "live_log_data" in st.session_state:
-            with st.container(height=250):
-                for entry in st.session_state.live_log_data:
-                    st.markdown(f"<div class='live-log'>{entry}</div>", unsafe_allow_html=True)
+        # 🔒 LOCKED FEATURE: Live Activity
+        if False:  # Change False to True to unlock
+            st.subheader("🔥 Live Activity (1hr)")
+            if st.button("📡 Scan Live Log", use_container_width=True):
+                def fetch_live_activity_int():
+                    ftp = get_ftp_connection()
+                    if not ftp: return ["Error: FTP Connection Failed."]
+                    files = []
+                    ftp.retrlines('NLST', files.append)
+                    adm_files = sorted([f for f in files if f.upper().endswith(".ADM")], reverse=True)
+                    if not adm_files: return ["Error: No ADM logs found."]
+                    buf = io.BytesIO()
+                    ftp.retrbinary(f"RETR {adm_files[0]}", buf.write)
+                    ftp.quit()
+                    lines = buf.getvalue().decode("utf-8", errors="ignore").splitlines()
+                    now_s = datetime.now(SERVER_TZ)
+                    hour_ago = now_s - timedelta(hours=1)
+                    live_events = []
+                    for line in lines:
+                        if " | " not in line: continue
+                        try:
+                            time_str = line.split(" | ")[0].split("]")[-1].strip()
+                            l_time = datetime.strptime(time_str, "%H:%M:%S").replace(year=now_s.year, month=now_s.month, day=now_s.day)
+                            l_time = SERVER_TZ.localize(l_time)
+                            if l_time >= hour_ago: live_events.append(line.strip())
+                        except: continue
+                    return live_events[::-1] if live_events else ["No activity in last 60 mins."]
+                st.session_state.live_log_data = fetch_live_activity_int()
+            
+            if "live_log_data" in st.session_state:
+                with st.container(height=250):
+                    for entry in st.session_state.live_log_data:
+                        st.markdown(f"<div class='live-log'>{entry}</div>", unsafe_allow_html=True)
 
         st.divider()
         st.header("Nitrado FTP Manager")
@@ -269,26 +271,29 @@ if check_password():
                     ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
 
         st.divider()
-        st.header("Nitrado API Explorer")
-        api_path = st.text_input("Folder Path", value="/dayzps/")
         
-        if st.button("🔍 Explore API Files", use_container_width=True):
-            url = f"https://api.nitrado.net/services/{NITRADO_SERVICE_ID}/gameservers/file_server/list"
-            headers = {'Authorization': f'Bearer {NITRADO_TOKEN}'}
-            params = {'dir': api_path}
+        # 🔒 LOCKED FEATURE: API Explorer
+        if False:  # Change False to True to unlock
+            st.header("Nitrado API Explorer")
+            api_path = st.text_input("Folder Path", value="/dayzps/")
             
-            try:
-                response = requests.get(url, headers=headers, params=params)
-                if response.status_code == 200:
-                    entries = response.json().get('data', {}).get('entries', [])
-                    st.success(f"Found {len(entries)} items")
-                    for entry in entries:
-                        icon = "📁" if entry['is_dir'] else "📄"
-                        st.markdown(f"**{icon} {entry['name']}**")
-                else:
-                    st.error(f"API Error: {response.status_code}")
-            except Exception as e:
-                st.error(f"Request failed: {str(e)}")
+            if st.button("🔍 Explore API Files", use_container_width=True):
+                url = f"https://api.nitrado.net/services/{NITRADO_SERVICE_ID}/gameservers/file_server/list"
+                headers = {'Authorization': f'Bearer {NITRADO_TOKEN}'}
+                params = {'dir': api_path}
+                
+                try:
+                    response = requests.get(url, headers=headers, params=params)
+                    if response.status_code == 200:
+                        entries = response.json().get('data', {}).get('entries', [])
+                        st.success(f"Found {len(entries)} items")
+                        for entry in entries:
+                            icon = "📁" if entry['is_dir'] else "📄"
+                            st.markdown(f"**{icon} {entry['name']}**")
+                    else:
+                        st.error(f"API Error: {response.status_code}")
+                except Exception as e:
+                    st.error(f"Request failed: {str(e)}")
 
     # ==============================================================================
     # MAIN PAGE CONTENT
@@ -311,7 +316,6 @@ if check_password():
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
                 
             elif mode == "Area Activity Search":
-                # --- NEW FEATURE: COORD STRING PARSING ---
                 st.write("📋 **Paste from iSurvive Serverlogs Map:**")
                 raw_paste = st.text_input("e.g. 4823.45 / 6129.29", placeholder="Paste coordinates here...")
                 
@@ -348,7 +352,6 @@ if check_password():
     with col2:
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
         
-        # Bridge logic for clickable map coordinates
         bridge_js = f"""
             <script>
             window.addEventListener('message', function(event) {{
@@ -364,7 +367,6 @@ if check_password():
         """
         components.html(bridge_js, height=0)
         
-        # Sync URL params from bridge to session state
         params = st.query_params
         if "map_x" in params and "map_y" in params:
             new_x = float(params["map_x"])
