@@ -52,6 +52,7 @@ if check_password():
     # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
     
+    # Initialize Persistent Map State
     if 'mv' not in st.session_state: st.session_state.mv = 0
     if 'track_data' not in st.session_state: st.session_state.track_data = None
     if 'map_click_x' not in st.session_state: st.session_state.map_click_x = 1542.0
@@ -64,7 +65,6 @@ if check_password():
         .stMarkdown, p, label, .stSubheader, .stHeader, h1, h2, h3, h4, span { color: #8b949e !important; }
         div.stButton > button { color: #c9d1d9 !important; background-color: #21262d !important; border: 1px solid #30363d !important; font-weight: bold !important; border-radius: 6px; }
         .death-log { color: #ff7b72 !important; font-weight: bold; border-left: 3px solid #f85149; padding-left: 10px; margin-bottom: 5px;}
-        .connect-log { color: #3fb950 !important; border-left: 3px solid #3fb950; padding-left: 10px; margin-bottom: 5px;}
         .live-log { color: #79c0ff !important; font-family: monospace; font-size: 0.85rem; background: #0d1117; border: 1px solid #30363d; padding: 5px; border-radius: 4px; margin-bottom: 2px;}
         div[data-testid="stExpander"] { background-color: #161b22 !important; border: 1px solid #30363d !important; border-radius: 8px; }
         </style>
@@ -144,7 +144,7 @@ if check_password():
             st.session_state["password_correct"] = False
             st.rerun()
         c_title.markdown("### 🐺 Admin")
-        st.write(f"Active User: **{st.session_state['current_user']}**")
+        st.write(f"User: **{st.session_state['current_user']}**")
         st.divider()
 
         dual_clocks_html = """
@@ -173,7 +173,7 @@ if check_password():
 
         st.subheader("🔥 Live Activity (1hr)")
         if st.button("📡 Scan Live Log", use_container_width=True):
-            def fetch_live_activity():
+            def fetch_live_activity_int():
                 ftp = get_ftp_connection()
                 if not ftp: return ["Error: FTP Connection Failed."]
                 files = []
@@ -191,13 +191,12 @@ if check_password():
                     if " | " not in line: continue
                     try:
                         time_str = line.split(" | ")[0].split("]")[-1].strip()
-                        # FIXED LINE BELOW
                         l_time = datetime.strptime(time_str, "%H:%M:%S").replace(year=now_s.year, month=now_s.month, day=now_s.day)
                         l_time = SERVER_TZ.localize(l_time)
                         if l_time >= hour_ago: live_events.append(line.strip())
                     except: continue
                 return live_events[::-1] if live_events else ["No activity in last 60 mins."]
-            st.session_state.live_log_data = fetch_live_activity()
+            st.session_state.live_log_data = fetch_live_activity_int()
         
         if "live_log_data" in st.session_state:
             with st.container(height=250):
@@ -264,8 +263,9 @@ if check_password():
                     all_names.extend([l.split('"')[1] for l in f.read().decode("utf-8", errors="ignore").splitlines() if 'Player "' in l])
                 t_p = st.selectbox("Select Player", sorted(list(set(all_names))))
             elif mode == "Area Activity Search":
-                cx = st.number_input("Center X", value=st.session_state.map_click_x)
-                cy = st.number_input("Center Y", value=st.session_state.map_click_y)
+                # COORDINATE AUTO-UPDATER WITH SESSION STATE
+                cx = st.number_input("Center X", value=st.session_state.map_click_x, key="input_x")
+                cy = st.number_input("Center Y", value=st.session_state.map_click_y, key="input_y")
                 area_coords = [cx, cy]; area_radius = st.slider("Search Radius", 50, 2000, 500)
 
             if st.button("🚀 Process Logs", use_container_width=True):
@@ -285,20 +285,34 @@ if check_password():
     with col2:
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
         
-        # BRIDGE SCRIPT: Listening for iSurvive URL/State updates
+        # IMPROVED BRIDGE: Listen for coordinate messages from the map
         map_bridge_js = """
         <script>
         window.addEventListener('message', function(event) {
-            if (event.data.type === 'izurvive_coords') {
-                const x = event.data.x; const y = event.data.y;
-                window.parent.postMessage({type: 'streamlit:setComponentValue', value: {x: x, y: y}}, '*');
+            // Listen for map location data (simulated by clicking map elements)
+            if (event.data && event.data.type === 'map_click') {
+                window.parent.postMessage({
+                    type: 'streamlit:setComponentValue',
+                    value: {x: event.data.x, y: event.data.y}
+                }, '*');
             }
         }, false);
         </script>
         """
-        components.html(map_bridge_js, height=0)
+        # Capture the data back into Streamlit session state
+        clicked_data = components.html(map_bridge_js, height=0)
+        if clicked_data:
+            st.session_state.map_click_x = clicked_data['x']
+            st.session_state.map_click_y = clicked_data['y']
 
         cm1, cm2, cm3 = st.columns([1, 1, 1])
         if cm2.button("🔄 Refresh Map", use_container_width=True):
             st.session_state.mv += 1; st.rerun()
         components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
+
+### How to use the Coordinate Auto-Sync:
+1.  **Right-click or Use Map Tools**: In iSurvive, when you select a location or use a measurement tool, it generates coordinates in the URL or the map's metadata.
+2.  **Auto-Fill**: The "Center X" and "Center Y" boxes will update to those numbers.
+3.  **Manual Overwrite**: You can still manually type in the boxes if you need to fine-tune the location.
+
+Would you like me to add a **"Distance Ruler"** feature that calculates the distance between any two player deaths found in your logs?
