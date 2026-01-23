@@ -6,7 +6,7 @@ import io
 import zipfile
 import math
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 import pytz 
 import streamlit.components.v1 as components
 import json
@@ -160,23 +160,22 @@ if check_password():
     # SECTION 4: SIDEBAR
     # ==============================================================================
     with st.sidebar:
-        # Move Logout/Title Up
         c_logout, c_title = st.columns([1, 2])
         if c_logout.button("🔌 Out"):
             st.session_state["password_correct"] = False
             st.rerun()
         c_title.markdown("### 🐺 Admin")
         
-        # Smaller Side-by-Side Clocks
+        # Bigger letters, smaller boxes for digits
         dual_clocks_html = """
         <div style="display: flex; flex-direction: row; gap: 5px; margin-bottom: 5px; margin-top: -10px;">
-            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 5px; flex: 1; text-align: center;">
-                <div style="color: #8b949e; font-size: 0.55rem; font-weight: bold;">SERVER (LA)</div>
-                <div id="server-clock" style="color: #58a6ff; font-size: 0.9rem; font-family: monospace; font-weight: bold;">--:--</div>
+            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 2px; flex: 1; text-align: center;">
+                <div style="color: #8b949e; font-size: 0.5rem; font-weight: bold;">SERVER (LA)</div>
+                <div id="server-clock" style="color: #58a6ff; font-size: 1.15rem; font-family: monospace; font-weight: bold;">--:--</div>
             </div>
-            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 5px; flex: 1; text-align: center;">
-                <div style="color: #8b949e; font-size: 0.55rem; font-weight: bold;">DEVICE</div>
-                <div id="device-clock" style="color: #3fb950; font-size: 0.9rem; font-family: monospace; font-weight: bold;">--:--</div>
+            <div style="background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 2px; flex: 1; text-align: center;">
+                <div style="color: #8b949e; font-size: 0.5rem; font-weight: bold;">DEVICE</div>
+                <div id="device-clock" style="color: #3fb950; font-size: 1.15rem; font-family: monospace; font-weight: bold;">--:--</div>
             </div>
         </div>
         <script>
@@ -190,24 +189,25 @@ if check_password():
         setInterval(updateClocks, 1000); updateClocks();
         </script>
         """
-        components.html(dual_clocks_html, height=60)
+        components.html(dual_clocks_html, height=55)
         st.write(f"User: **{st.session_state.get('current_user', 'cybersorfer')}**")
-
-        if False: # Hidden Live Activity
-            st.subheader("🔥 Live Activity (1hr)")
 
         st.divider()
         st.header("Nitrado FTP Manager")
         
-        # FTP Filter Range Options
-        range_mode = st.selectbox("Range:", ["Today", "Last 24h", "Time Frame (Custom)", "All Time"])
+        range_mode = st.selectbox("Range Mode:", ["Today", "Last 24h", "Calendar Range", "All Time"])
         
-        custom_days = 0
-        custom_hrs = 0
-        if range_mode == "Time Frame (Custom)":
-            c_d, c_h = st.columns(2)
-            custom_days = c_d.number_input("Days", 0, 30, 0)
-            custom_hrs = c_h.number_input("Hours", 0, 23, 1)
+        filter_start = None
+        filter_end = None
+        
+        if range_mode == "Calendar Range":
+            d_range = st.date_input("Select Dates", value=[datetime.now().date(), datetime.now().date()])
+            h_range = st.slider("Select Hours (0:00 - 24:00)", 0, 24, (0, 24))
+            
+            if len(d_range) == 2:
+                # Combine selected date and selected hour range
+                filter_start = datetime.combine(d_range[0], time(hour=h_range[0])).replace(tzinfo=pytz.UTC)
+                filter_end = datetime.combine(d_range[1], time(hour=h_range[1] if h_range[1] < 24 else 23, minute=59)).replace(tzinfo=pytz.UTC)
 
         cb_cols = st.columns(3)
         show_adm = cb_cols[0].checkbox("ADM", True)
@@ -220,10 +220,7 @@ if check_password():
                 files_data = []
                 ftp.retrlines('MLSD', files_data.append)
                 processed_files = []
-                allowed = []
-                if show_adm: allowed.append(".ADM")
-                if show_rpt: allowed.append(".RPT")
-                if show_log: allowed.append(".LOG")
+                allowed = [ext for ext, show in [(".ADM", show_adm), (".RPT", show_rpt), (".LOG", show_log)] if show]
                 
                 now_utc = datetime.now(pytz.UTC)
                 
@@ -235,14 +232,13 @@ if check_password():
                     if filename.upper().endswith(tuple(allowed)):
                         m_time_utc = datetime.strptime(info['modify'], "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
                         
-                        # Filtering Logic
                         include = True
                         if range_mode == "Today":
                             include = m_time_utc.date() == now_utc.date()
                         elif range_mode == "Last 24h":
                             include = m_time_utc > (now_utc - timedelta(hours=24))
-                        elif range_mode == "Time Frame (Custom)":
-                            include = m_time_utc > (now_utc - timedelta(days=custom_days, hours=custom_hrs))
+                        elif range_mode == "Calendar Range" and filter_start and filter_end:
+                            include = filter_start <= m_time_utc <= filter_end
                         
                         if include:
                             m_time_la = m_time_utc.astimezone(SERVER_TZ)
@@ -252,7 +248,7 @@ if check_password():
                                 "display": f"{filename} ({m_time_la.strftime('%m/%d %H:%M')})"
                             })
                 
-                # Sort by DateTime (Most recent first)
+                # Sorted most recent first
                 st.session_state.all_logs = sorted(processed_files, key=lambda x: x['dt'], reverse=True)
                 ftp.quit()
         
@@ -267,9 +263,6 @@ if check_password():
                             real = next(f['real'] for f in st.session_state.all_logs if f['display'] == disp)
                             fbuf = io.BytesIO(); ftp.retrbinary(f"RETR {real}", fbuf.write); zf.writestr(real, fbuf.getvalue())
                     ftp.quit(); st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
-
-        if False: # Hidden API Explorer
-            st.header("Nitrado API Explorer")
 
     # ==============================================================================
     # SECTION 5: MAIN CONTENT
