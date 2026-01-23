@@ -55,7 +55,6 @@ if check_password():
     # ==============================================================================
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
     
-    # Initialize Persistent Map State
     if 'mv' not in st.session_state: st.session_state.mv = 0
     if 'track_data' not in st.session_state: st.session_state.track_data = None
     if 'map_click_x' not in st.session_state: st.session_state.map_click_x = 1542.0
@@ -148,7 +147,7 @@ if check_password():
             st.session_state["password_correct"] = False
             st.rerun()
         c_title.markdown("### 🐺 Admin")
-        st.write(f"User: **{st.session_state.get('current_user', 'cybersorfer')}**")
+        st.write(f"Active User: **{st.session_state.get('current_user', 'cybersorfer')}**")
         st.divider()
 
         dual_clocks_html = """
@@ -289,25 +288,31 @@ if check_password():
     with col2:
         st.markdown(f"<h4 style='text-align: center;'>📍 iSurvive Live Map</h4>", unsafe_allow_html=True)
         
-        # FIXED IFRAME COORDINATE LISTENER
-        # This component safely receives data from your map interaction
-        clicked_data = components.html("""
+        # PERSISTENT COORDINATE CAPTURE (IFRAME BRIDGE)
+        # Using a safer way to receive coordinate data from JavaScript
+        bridge_js = """
             <script>
             window.addEventListener('message', function(event) {
                 if (event.data.type === 'setCoords') {
+                    // This tells the Streamlit component to update its internal value
                     window.parent.postMessage({
                         type: 'streamlit:setComponentValue', 
-                        value: {x: event.data.x, y: event.data.y}
+                        value: JSON.stringify({x: event.data.x, y: event.data.y})
                     }, '*');
                 }
             });
             </script>
-        """, height=0)
+        """
+        # Data is received here as a JSON string
+        raw_map_data = components.html(bridge_js, height=0)
         
-        # Update session state safely
-        if clicked_data:
-            st.session_state.map_click_x = float(clicked_data.get('x', st.session_state.map_click_x))
-            st.session_state.map_click_y = float(clicked_data.get('y', st.session_state.map_click_y))
+        if raw_map_data:
+            import json
+            try:
+                clicked_json = json.loads(raw_map_data)
+                st.session_state.map_click_x = float(clicked_json.get('x', 1542.0))
+                st.session_state.map_click_y = float(clicked_json.get('y', 13915.0))
+            except: pass
 
         cm1, cm2, cm3 = st.columns([1, 1, 1])
         if cm2.button("🔄 Refresh Map", use_container_width=True):
