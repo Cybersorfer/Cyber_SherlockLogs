@@ -83,6 +83,7 @@ if check_password():
             return ftp
         except: return None
 
+    # SECTION 3: LOGIC HELPERS
     def make_izurvive_link(coords):
         if coords: return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
         return ""
@@ -94,7 +95,8 @@ if check_password():
             if "pos=<" in line:
                 raw = line.split("pos=<")[1].split(">")[0]
                 parts = [p.strip() for p in raw.split(",")]
-                coords = [float(parts[0]), float(parts[2])] 
+                # FIXED: DayZ logs are <X, Y, Z>. Index 1 is the North/South Map coordinate.
+                coords = [float(parts[0]), float(parts[1])] 
         except: pass 
         return str(name), coords
 
@@ -105,9 +107,11 @@ if check_password():
     def filter_logs(files, mode, target_player=None, area_coords=None, area_radius=500):
         grouped_report, boosting_tracker = {}, {}
         raw_filtered_lines = []
-        building_keys = ["placed", "built", "built base", "built wall", "built gate", "built platform"]
-        raid_keys = ["dismantled", "folded", "unmount", "unmounted", "packed"]
-        session_keys = ["connected", "disconnected", "died", "killed"]
+        
+        # Enhanced Keywords
+        building_keys = ["placed", "built", "constructed", "base", "wall", "gate", "platform", "watchtower"]
+        raid_keys = ["dismantled", "folded", "unmount", "destroyed", "packed", "cut"]
+        session_keys = ["connected", "disconnected", "died", "killed", "suicide"]
         boosting_objects = ["fence kit", "nameless object", "fireplace", "garden plot", "barrel"]
 
         for uploaded_file in files:
@@ -162,8 +166,10 @@ if check_password():
     with st.sidebar:
         st.markdown("### 🐺 Admin Portal")
         st.divider()
-        st.header("Nitrado FTP Manager")
         
+        debug_mode = st.toggle("🐞 Debug Mode")
+        
+        st.header("Nitrado FTP Manager")
         date_range = st.date_input("Select Date Range:", value=(datetime.now() - timedelta(days=1), datetime.now()))
         
         hours_list = [time(h, 0) for h in range(24)]
@@ -224,10 +230,9 @@ if check_password():
         st.markdown("### 🛠️ Ultimate Log Processor")
         uploaded_files = st.file_uploader("Upload Logs", accept_multiple_files=True)
         
-        # Reset if no files
-        if not uploaded_files:
-            st.session_state.track_data = {}
-            st.session_state.raw_download = ""
+        if uploaded_files and debug_mode:
+            uploaded_files[0].seek(0)
+            st.code(uploaded_files[0].read().decode("utf-8", errors="ignore")[:500], language="text")
 
         if uploaded_files:
             mode = st.selectbox("Mode", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity", "Area Activity Search"])
@@ -263,18 +268,14 @@ if check_password():
                     if report:
                         st.session_state.track_data = report
                         st.session_state.raw_download = raw
-                        st.success(f"Found activity for {len(report)} players")
                     else:
                         st.session_state.track_data = {}
-                        st.warning("No matches found.")
+                        st.warning("No matches found. Check your filters or Mode.")
 
-        # Display persistent results
-        if st.session_state.track_data:
+        if st.session_state.get("track_data"):
             try:
-                f_s, f_e = date_range[0].strftime('%m-%d'), date_range[1].strftime('%m-%d')
-                f_n = f"FILTERED_{mode.replace(' ', '_')}_{f_s}_to_{f_e}.adm"
+                f_n = f"FILTERED_{mode.replace(' ', '_')}_{date_range[0].strftime('%m-%d')}.adm"
             except: f_n = "FILTERED_LOGS.adm"
-            
             st.download_button("💾 Save Filtered ADM", st.session_state.raw_download, f_n)
             for player, events in st.session_state.track_data.items():
                 with st.expander(f"👤 {player} ({len(events)} events)"):
