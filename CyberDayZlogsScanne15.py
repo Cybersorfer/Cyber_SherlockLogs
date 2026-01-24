@@ -53,8 +53,10 @@ def check_password():
 # MAIN APPLICATION BLOCK
 # ==============================================================================
 if check_password():
-    st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
-    
+    if 'page_configured' not in st.session_state:
+        st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
+        st.session_state.page_configured = True
+
     # Session State Initialization
     if 'mv' not in st.session_state: st.session_state.mv = 0
     if 'all_logs' not in st.session_state: st.session_state.all_logs = []
@@ -83,7 +85,7 @@ if check_password():
             return ftp
         except: return None
 
-    # SECTION 3: LOGIC HELPERS
+    # Logic Helpers
     def make_izurvive_link(coords):
         if coords: return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
         return ""
@@ -95,7 +97,6 @@ if check_password():
             if "pos=<" in line:
                 raw = line.split("pos=<")[1].split(">")[0]
                 parts = [p.strip() for p in raw.split(",")]
-                # FIXED: DayZ logs are <X, Y, Z>. Index 1 is the North/South Map coordinate.
                 coords = [float(parts[0]), float(parts[1])] 
         except: pass 
         return str(name), coords
@@ -104,11 +105,15 @@ if check_password():
         if not p1 or not p2: return 999999
         return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
+    # UPDATED FILTER LOGIC FOR iZURVIVE COMPATIBILITY
     def filter_logs(files, mode, target_player=None, area_coords=None, area_radius=500):
         grouped_report, boosting_tracker = {}, {}
         raw_filtered_lines = []
         
-        # Enhanced Keywords
+        # REQUIRED iZURVIVE HEADER FORMAT
+        now_str = datetime.now().strftime("%Y-%m-%d at %H:%M:%S")
+        header = f"******************************************************************************\nAdminLog started on {now_str}\n\n"
+
         building_keys = ["placed", "built", "constructed", "base", "wall", "gate", "platform", "watchtower"]
         raid_keys = ["dismantled", "folded", "unmount", "destroyed", "packed", "cut"]
         session_keys = ["connected", "disconnected", "died", "killed", "suicide"]
@@ -160,23 +165,20 @@ if check_password():
                     entry = {"time": clean_time, "text": line.strip(), "link": make_izurvive_link(coords), "status": status}
                     if name not in grouped_report: grouped_report[name] = []
                     grouped_report[name].append(entry)
-        return grouped_report, "".join(raw_filtered_lines)
+                    
+        return grouped_report, header + "".join(raw_filtered_lines)
 
     # --- SIDEBAR & FTP ---
     with st.sidebar:
         st.markdown("### 🐺 Admin Portal")
         st.divider()
-        
         debug_mode = st.toggle("🐞 Debug Mode")
-        
         st.header("Nitrado FTP Manager")
         date_range = st.date_input("Select Date Range:", value=(datetime.now() - timedelta(days=1), datetime.now()))
-        
         hours_list = [time(h, 0) for h in range(24)]
         t_cols = st.columns(2)
         start_t_obj = t_cols[0].selectbox("From:", options=hours_list, format_func=lambda t: t.strftime("%I:00%p").lower(), index=0)
         end_t_obj = t_cols[1].selectbox("To:", options=hours_list, format_func=lambda t: t.strftime("%I:00%p").lower(), index=23)
-        
         cb_cols = st.columns(3)
         show_adm = cb_cols[0].checkbox("ADM", True); show_rpt = cb_cols[1].checkbox("RPT", True); show_log = cb_cols[2].checkbox("LOG", True)
         
@@ -190,7 +192,6 @@ if check_password():
                     processed = []
                     start_dt = datetime.combine(start_date, start_t_obj).replace(tzinfo=pytz.UTC)
                     end_dt = datetime.combine(end_date, end_t_obj).replace(hour=end_t_obj.hour, minute=59, second=59, tzinfo=pytz.UTC)
-                    
                     for line in files_raw:
                         filename = line.split(';')[-1].strip()
                         exts = ([".ADM"] if show_adm else []) + ([".RPT"] if show_rpt else []) + ([".LOG"] if show_log else [])
@@ -210,7 +211,6 @@ if check_password():
             all_opts = [f['display'] for f in st.session_state.all_logs]
             select_all = st.checkbox("Select All Files")
             selected_disp = st.multiselect("Select Logs:", options=all_opts, default=all_opts if select_all else [])
-            
             if selected_disp and st.button("📦 Prepare ZIP", use_container_width=True):
                 buf = io.BytesIO()
                 ftp_z = get_ftp_connection()
@@ -220,63 +220,35 @@ if check_password():
                         f_data = io.BytesIO(); ftp_z.retrbinary(f"RETR {real_name}", f_data.write)
                         zf.writestr(real_name, f_data.getvalue())
                 ftp_z.quit()
-                s_name, e_name = date_range[0].strftime("%m-%d"), date_range[1].strftime("%m-%d")
-                t_name = f"{start_t_obj.strftime('%H%M')}-{end_t_obj.strftime('%H%M')}"
-                st.download_button("💾 Download ZIP", buf.getvalue(), f"Logs_{s_name}_to_{e_name}_{t_name}.zip", use_container_width=True)
+                st.download_button("💾 Download ZIP", buf.getvalue(), "cyber_logs.zip", use_container_width=True)
 
     # --- MAIN DASHBOARD ---
     col1, col2 = st.columns([1, 2.5])
     with col1:
         st.markdown("### 🛠️ Ultimate Log Processor")
         uploaded_files = st.file_uploader("Upload Logs", accept_multiple_files=True)
-        
-        if uploaded_files and debug_mode:
-            uploaded_files[0].seek(0)
-            st.code(uploaded_files[0].read().decode("utf-8", errors="ignore")[:500], language="text")
-
         if uploaded_files:
             mode = st.selectbox("Mode", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity", "Area Activity Search"])
             t_p, area_coords, area_radius = None, None, 500
-            
             if mode == "Full Activity per Player":
                 names = set()
                 for f in uploaded_files:
                     f.seek(0)
                     names.update(re.findall(r'Player "([^"]+)"', f.read().decode("utf-8", errors="ignore")))
                 t_p = st.selectbox("Player", sorted(list(names)))
-            
             elif mode == "Area Activity Search":
-                presets = {"Custom / Paste": None, "Tisy": [1542, 13915], "NWAF": [4530, 10245]}
+                presets = {"Tisy": [1542, 13915], "NWAF": [4530, 10245], "VMC": [3824, 8912]}
                 loc = st.selectbox("Locations", list(presets.keys()))
-                if loc == "Custom / Paste":
-                    raw_paste = st.text_input("Paste iZurvive Coords (X / Y)", placeholder="10146.06 / 3953.27")
-                    if raw_paste and "/" in raw_paste:
-                        try:
-                            parts = raw_paste.split("/")
-                            val_x, val_z = float(parts[0].strip()), float(parts[1].strip())
-                        except: val_x, val_z = 0.0, 0.0
-                    else:
-                        c1, c2 = st.columns(2)
-                        val_x, val_z = c1.number_input("X", value=0.0), c2.number_input("Z", value=0.0)
-                    area_coords = [val_x, val_z]
-                else: area_coords = presets[loc]
+                area_coords = presets[loc]
                 area_radius = st.slider("Radius (Meters)", 50, 5000, 500)
             
             if st.button("🚀 Process Logs", use_container_width=True):
                 with st.spinner("Analyzing..."):
                     report, raw = filter_logs(uploaded_files, mode, t_p, area_coords, area_radius)
-                    if report:
-                        st.session_state.track_data = report
-                        st.session_state.raw_download = raw
-                    else:
-                        st.session_state.track_data = {}
-                        st.warning("No matches found. Check your filters or Mode.")
+                    st.session_state.track_data, st.session_state.raw_download = report, raw
 
         if st.session_state.get("track_data"):
-            try:
-                f_n = f"FILTERED_{mode.replace(' ', '_')}_{date_range[0].strftime('%m-%d')}.adm"
-            except: f_n = "FILTERED_LOGS.adm"
-            st.download_button("💾 Save Filtered ADM", st.session_state.raw_download, f_n)
+            st.download_button("💾 Save Filtered ADM", st.session_state.raw_download, "FILTERED_LOGS.adm")
             for player, events in st.session_state.track_data.items():
                 with st.expander(f"👤 {player} ({len(events)} events)"):
                     for ev in events:
