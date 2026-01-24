@@ -62,6 +62,7 @@ if check_password():
     if 'all_logs' not in st.session_state: st.session_state.all_logs = []
     if 'track_data' not in st.session_state: st.session_state.track_data = {}
     if 'raw_download' not in st.session_state: st.session_state.raw_download = ""
+    if 'current_mode' not in st.session_state: st.session_state.current_mode = "Filter"
 
     st.markdown("""
         <style>
@@ -105,12 +106,10 @@ if check_password():
         if not p1 or not p2: return 999999
         return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
-    # UPDATED FILTER LOGIC FOR iZURVIVE COMPATIBILITY
     def filter_logs(files, mode, target_player=None, area_coords=None, area_radius=500):
         grouped_report, boosting_tracker = {}, {}
         raw_filtered_lines = []
         
-        # REQUIRED iZURVIVE HEADER FORMAT
         now_str = datetime.now().strftime("%Y-%m-%d at %H:%M:%S")
         header = f"******************************************************************************\nAdminLog started on {now_str}\n\n"
 
@@ -229,6 +228,8 @@ if check_password():
         uploaded_files = st.file_uploader("Upload Logs", accept_multiple_files=True)
         if uploaded_files:
             mode = st.selectbox("Mode", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity", "Area Activity Search"])
+            st.session_state.current_mode = mode # Track mode for file naming
+            
             t_p, area_coords, area_radius = None, None, 500
             if mode == "Full Activity per Player":
                 names = set()
@@ -236,10 +237,24 @@ if check_password():
                     f.seek(0)
                     names.update(re.findall(r'Player "([^"]+)"', f.read().decode("utf-8", errors="ignore")))
                 t_p = st.selectbox("Player", sorted(list(names)))
+            
             elif mode == "Area Activity Search":
-                presets = {"Tisy": [1542, 13915], "NWAF": [4530, 10245], "VMC": [3824, 8912]}
+                # RESTORED COORDS PASTE FEATURE
+                presets = {"Custom / Paste": None, "Tisy": [1542, 13915], "NWAF": [4530, 10245], "VMC": [3824, 8912]}
                 loc = st.selectbox("Locations", list(presets.keys()))
-                area_coords = presets[loc]
+                if loc == "Custom / Paste":
+                    raw_paste = st.text_input("Paste iZurvive Coords (X / Y)", placeholder="10146.06 / 3953.27")
+                    if raw_paste and "/" in raw_paste:
+                        try:
+                            parts = raw_paste.split("/")
+                            val_x, val_z = float(parts[0].strip()), float(parts[1].strip())
+                        except: val_x, val_z = 0.0, 0.0
+                    else:
+                        c1, c2 = st.columns(2)
+                        val_x, val_z = c1.number_input("X", value=0.0), c2.number_input("Z", value=0.0)
+                    area_coords = [val_x, val_z]
+                else:
+                    area_coords = presets[loc]
                 area_radius = st.slider("Radius (Meters)", 50, 5000, 500)
             
             if st.button("🚀 Process Logs", use_container_width=True):
@@ -248,7 +263,11 @@ if check_password():
                     st.session_state.track_data, st.session_state.raw_download = report, raw
 
         if st.session_state.get("track_data"):
-            st.download_button("💾 Save Filtered ADM", st.session_state.raw_download, "FILTERED_LOGS.adm")
+            # DYNAMIC FILENAME BASED ON FILTER
+            clean_mode = st.session_state.current_mode.replace(" ", "_").replace("(", "").replace(")", "")
+            file_name = f"{clean_mode}.adm"
+            st.download_button(f"💾 Save {file_name}", st.session_state.raw_download, file_name)
+            
             for player, events in st.session_state.track_data.items():
                 with st.expander(f"👤 {player} ({len(events)} events)"):
                     for ev in events:
