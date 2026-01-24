@@ -65,6 +65,7 @@ if check_password():
         .stMarkdown, p, label, .stSubheader, .stHeader, h1, h2, h3, h4, span { color: #8b949e !important; }
         div.stButton > button { color: #c9d1d9 !important; background-color: #21262d !important; border: 1px solid #30363d !important; font-weight: bold !important; border-radius: 6px; }
         .death-log { color: #ff7b72 !important; font-weight: bold; border-left: 3px solid #f85149; padding-left: 10px; margin-bottom: 5px; background: #21262d; border-radius: 4px;}
+        .raid-log { color: #e3b341 !important; font-weight: bold; border-left: 3px solid #e3b341; padding-left: 10px; margin-bottom: 5px; background: #21262d; }
         </style>
         """, unsafe_allow_html=True)
 
@@ -108,7 +109,6 @@ if check_password():
         start_t_obj = t_cols[0].selectbox("From:", options=hours_list, format_func=format_hour, index=0)
         end_t_obj = t_cols[1].selectbox("To:", options=hours_list, format_func=format_hour, index=23)
         
-        # FIXED: Define timeframe variables outside of the button so zip naming can see them
         start_date, end_date = (sel_dates[0], sel_dates[1]) if len(sel_dates) == 2 else (sel_dates[0], sel_dates[0])
         global_start_dt = datetime.combine(start_date, start_t_obj).replace(tzinfo=pytz.UTC)
         global_end_dt = datetime.combine(end_date, end_t_obj).replace(hour=end_t_obj.hour, minute=59, second=59, tzinfo=pytz.UTC)
@@ -147,7 +147,6 @@ if check_password():
             selected_disp = st.multiselect("Select Logs:", options=log_options, default=log_options if select_all else None)
             
             if selected_disp and st.button("📦 Prepare ZIP", use_container_width=True):
-                # FIXED: Uses the pre-calculated global datetimes for the name
                 zip_name = f"Logs_{global_start_dt.strftime('%Y-%m-%d_%H%M')}_to_{global_end_dt.strftime('%Y-%m-%d_%H%M')}.zip"
                 buf = io.BytesIO()
                 ftp_z = get_ftp_connection()
@@ -162,73 +161,104 @@ if check_password():
                     st.download_button(f"💾 Download {zip_name}", buf.getvalue(), zip_name, use_container_width=True)
 
     # ==============================================================================
-    # SECTION 4: MAIN CONTENT (RESTORED LOG PROCESSOR)
+    # SECTION 4: ULTIMATE LOG PROCESSOR (FULLY RESTORED)
     # ==============================================================================
-    col1, col2 = st.columns([1.3, 2.3])
+    col1, col2 = st.columns([1.4, 2.3])
     
     with col1:
         st.markdown("### 🛠️ Ultimate Log Processor")
-        uploaded_files = st.file_uploader("Drop Logs Here", accept_multiple_files=True)
+        uploaded_files = st.file_uploader("Drop Logs Here (.ADM, .RPT, .LOG)", accept_multiple_files=True)
         
         if uploaded_files:
-            full_text = ""
+            lines = []
             for f in uploaded_files:
-                full_text += f.read().decode("utf-8", errors="ignore") + "\n"
+                content = f.read().decode("utf-8", errors="ignore")
+                lines.extend(content.splitlines())
             
+            st.divider()
+            # Restore Advanced Filtering Interface
             analysis_mode = st.radio("Activity Scanners:", 
-                ["Killfeed & Positions", "Building Activity", "Raid Watch", "Suspicious Activity", "Player Search"])
+                ["Full Activity Log", "Building & Base Activity", "Raid Watch (Explosives)", "Suspicious Activity", "Player Deep Search", "Search by Area"])
 
-            if analysis_mode == "Killfeed & Positions":
+            if analysis_mode == "Full Activity Log":
+                st.subheader("📋 Full Server Activity")
+                # Pattern for basic position logging
                 pattern = r"(\d{2}:\d{2}:\d{2}).*?pos=<([\d\.]+), ([\d\.]+), ([\d\.]+)>"
-                matches = re.findall(pattern, full_text)
-                if matches:
-                    df = pd.DataFrame([{"Time": m[0], "X": float(m[1]), "Z": float(m[3])} for m in matches])
-                    st.dataframe(df, use_container_width=True)
-            
-            elif analysis_mode == "Building Activity":
-                st.subheader("🏗️ Construction & Deconstruction")
-                # Restored: Scans for built/placed/dismantled/destroyed actions
+                hits = []
+                for line in lines:
+                    m = re.search(pattern, line)
+                    if m:
+                        hits.append({"Time": m.group(1), "X": float(m.group(2)), "Z": float(m.group(4)), "Raw": line[:100]+"..."})
+                if hits:
+                    st.dataframe(pd.DataFrame(hits), use_container_width=True)
+
+            elif analysis_mode == "Building & Base Activity":
+                st.subheader("🏗️ Construction & Dismantling")
+                # Pattern for building/placing/dismantling
                 build_pattern = r"(\d{2}:\d{2}:\d{2}).*?(built|placed|dismantled|destroyed).*?at pos=<([\d\.]+), ([\d\.]+), ([\d\.]+)>"
-                builds = re.findall(build_pattern, full_text, re.IGNORECASE)
-                if builds:
-                    st.write(pd.DataFrame(builds, columns=["Time", "Action", "X", "Y", "Z"]))
+                build_data = []
+                for line in lines:
+                    m = re.search(build_pattern, line, re.I)
+                    if m:
+                        build_data.append({"Time": m.group(1), "Action": m.group(2), "Coord": f"{m.group(3)}, {m.group(5)}", "Full": line})
+                if build_data:
+                    st.table(pd.DataFrame(build_data)[["Time", "Action", "Coord"]])
                 else:
                     st.info("No building activity found.")
 
-            elif analysis_mode == "Raid Watch":
-                st.subheader("🧨 Explosives & Raid Items")
-                # Restored: Specifically looks for high-tier raid items usage
-                raid_items = "Explosive|Plastic|Grenade|Claymore|Detonator|Mine"
-                raids = [line for line in full_text.split('\n') if re.search(raid_items, line, re.I)]
-                if raids:
-                    for r in raids[-30:]: st.markdown(f"<div class='death-log'>{r}</div>", unsafe_allow_html=True)
+            elif analysis_mode == "Raid Watch (Explosives)":
+                st.subheader("🧨 Explosive & Raid Item Detection")
+                raid_items = ["Explosive", "Plastic Explosive", "Grenade", "Claymore", "Detonator", "Mine", "Satchel"]
+                raids_found = [l for l in lines if any(x.lower() in l.lower() for x in raid_items)]
+                if raids_found:
+                    for r in raids_found[-50:]: 
+                        st.markdown(f"<div class='raid-log'>{r}</div>", unsafe_allow_html=True)
                 else:
-                    st.info("No raid-related items detected in logs.")
+                    st.info("No raid items detected.")
 
             elif analysis_mode == "Suspicious Activity":
-                st.subheader("🚨 Admin & Speed Checks")
-                # Restored: Scans for teleports and admin commands
-                sus_pattern = r"admin|teleport|speed|jump|cheater|banned"
-                sus_logs = [line for line in full_text.split('\n') if re.search(sus_pattern, line, re.I)]
+                st.subheader("🚨 Admin & Speed Alerts")
+                # Pattern for teleports or admin commands
+                sus_keywords = ["admin", "teleport", "speed", "godmode", "banned", "kick"]
+                sus_logs = [l for l in lines if any(k in l.lower() for k in sus_keywords)]
                 if sus_logs:
-                    st.warning(f"Found {len(sus_logs)} potentially suspicious entries.")
-                    st.text_area("Suspicious Logs", "\n".join(sus_logs), height=300)
+                    for s in sus_logs: st.warning(s)
                 else:
-                    st.info("No suspicious patterns found.")
+                    st.info("No admin/suspicious activity found.")
 
-            elif analysis_mode == "Player Search":
-                st.subheader("👤 Deep Player Scan")
-                # Restored: Full activity history for a specific name/ID/position
-                p_name = st.text_input("Enter Player Name, Steam/PSN ID, or partial name:")
-                if p_name:
-                    p_activity = [line for line in full_text.split('\n') if p_name.lower() in line.lower()]
-                    if p_activity:
-                        st.success(f"Found {len(p_activity)} actions for '{p_name}'")
-                        st.text_area("Activity History", "\n".join(p_activity), height=400)
+            elif analysis_mode == "Player Deep Search":
+                st.subheader("👤 Player Activity Tracker")
+                p_query = st.text_input("Enter Player Name or ID:")
+                if p_query:
+                    results = [l for l in lines if p_query.lower() in l.lower()]
+                    if results:
+                        st.success(f"Found {len(results)} entries.")
+                        st.text_area("Activity Results", "\n".join(results), height=400)
                     else:
-                        st.error("No data found for that player.")
+                        st.error("No data found for this player.")
 
-            if st.button("📍 Plot Results on Map"):
+            elif analysis_mode == "Search by Area":
+                st.subheader("🗺️ Coordinate Radius Search")
+                c_cols = st.columns(3)
+                target_x = c_cols[0].number_input("X Coord", value=0.0)
+                target_z = c_cols[1].number_input("Z Coord", value=0.0)
+                radius = c_cols[2].number_input("Radius (m)", value=100)
+                
+                area_hits = []
+                pos_pattern = r"pos=<([\d\.]+), ([\d\.]+), ([\d\.]+)>"
+                for line in lines:
+                    m = re.search(pos_pattern, line)
+                    if m:
+                        lx, lz = float(m.group(1)), float(m.group(3))
+                        dist = math.sqrt((target_x - lx)**2 + (target_z - lz)**2)
+                        if dist <= radius:
+                            area_hits.append(line)
+                
+                if area_hits:
+                    st.success(f"Found {len(area_hits)} events in area.")
+                    st.text_area("Area Logs", "\n".join(area_hits), height=300)
+
+            if st.button("📍 Update Map Markers"):
                 st.session_state.mv += 1
 
     with col2:
