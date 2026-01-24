@@ -57,8 +57,6 @@ if check_password():
     
     if 'mv' not in st.session_state: st.session_state.mv = 0
     if 'track_data' not in st.session_state: st.session_state.track_data = None
-    if 'map_click_x' not in st.session_state: st.session_state.map_click_x = 1542.0
-    if 'map_click_y' not in st.session_state: st.session_state.map_click_y = 13915.0
     if 'all_logs' not in st.session_state: st.session_state.all_logs = []
 
     st.markdown("""
@@ -69,25 +67,27 @@ if check_password():
         div.stButton > button { color: #c9d1d9 !important; background-color: #21262d !important; border: 1px solid #30363d !important; font-weight: bold !important; border-radius: 6px; }
         .death-log { color: #ff7b72 !important; font-weight: bold; border-left: 3px solid #f85149; padding-left: 10px; margin-bottom: 5px;}
         .connect-log { color: #3fb950 !important; border-left: 3px solid #3fb950; padding-left: 10px; margin-bottom: 5px;}
-        div[data-testid="stExpander"] { background-color: #161b22 !important; border: 1px solid #30363d !important; border-radius: 8px; }
         </style>
         """, unsafe_allow_html=True)
 
-    # REVERTED CONFIG
-    FTP_HOST, FTP_USER, FTP_PASS, FTP_PATH = "usla643.gamedata.io", "ni11109181_1", "343mhfxd", "/config/"
+    # UPDATED FTP CONFIGURATION FOR DAYZ PSN
+    FTP_HOST = "usla643.gamedata.io"
+    FTP_USER = "ni11109181_1"
+    FTP_PASS = "343mhfxd"
+    FTP_PATH = "/dayzps/config" # Explicit path to Nitrado Config folder
 
     def get_ftp_connection():
         try:
             ftp = FTP(FTP_HOST, timeout=15)
             ftp.login(user=FTP_USER, passwd=FTP_PASS)
-            # Try to navigate to path, fallback to root if /config/ fails
-            try:
-                ftp.cwd(FTP_PATH)
-            except:
-                ftp.cwd("/")
+            # Robust path navigation
+            path_parts = FTP_PATH.strip("/").split("/")
+            ftp.cwd("/") # Start from root
+            for part in path_parts:
+                ftp.cwd(part)
             return ftp
         except Exception as e:
-            st.error(f"FTP Error: {e}")
+            st.error(f"FTP Connection Failed: {e}")
             return None
 
     def extract_dt_from_filename(filename):
@@ -101,11 +101,10 @@ if check_password():
         return None
 
     # ==============================================================================
-    # SECTION 3: SIDEBAR (RESTORED SYNC FEATURE)
+    # SECTION 3: SIDEBAR (FTP SYNC & ZIP)
     # ==============================================================================
     with st.sidebar:
         st.markdown("### 🐺 Admin Portal")
-        
         st.divider()
         st.header("Nitrado FTP Manager")
         
@@ -118,21 +117,30 @@ if check_password():
         if st.button("🔄 Sync FTP List", use_container_width=True):
             ftp = get_ftp_connection()
             if ftp:
-                with st.spinner("Fetching logs..."):
+                with st.spinner("Fetching logs from /dayzps/config..."):
                     files_raw = []
-                    ftp.retrlines('MLSD', files_raw.append)
+                    # Try MLSD first, fallback to LIST if node is older
+                    try:
+                        ftp.retrlines('MLSD', files_raw.append)
+                    except:
+                        ftp.retrlines('LIST', files_raw.append)
+                    
                     processed = []
-                    allowed = [ext for ext, s in [(".ADM", show_adm), (".RPT", show_rpt), (".LOG", show_log)] if s]
+                    allowed_ext = []
+                    if show_adm: allowed_ext.append(".ADM")
+                    if show_rpt: allowed_ext.append(".RPT")
+                    if show_log: allowed_ext.append(".LOG")
+                    
                     now_utc = datetime.now(pytz.UTC)
                     
                     for line in files_raw:
-                        parts = line.split(';')
-                        filename = parts[-1].strip()
-                        if filename.upper().endswith(tuple(allowed)):
+                        filename = line.split(';')[-1].strip() if ';' in line else line.split()[-1]
+                        if filename.upper().endswith(tuple(allowed_ext)):
                             dt = extract_dt_from_filename(filename)
                             if not dt:
                                 try:
-                                    m_str = line.split('modify=')[1].split(';')[0]
+                                    # Fallback for modified time if filename doesn't have it
+                                    m_str = next(p for p in line.split(';') if 'modify=' in p).split('=')[1]
                                     dt = datetime.strptime(m_str, "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
                                 except: continue
                             
@@ -146,9 +154,8 @@ if check_password():
                     
                     st.session_state.all_logs = sorted(processed, key=lambda x: x['dt'], reverse=True)
                     ftp.quit()
-                    st.success(f"Loaded {len(st.session_state.all_logs)} files.")
+                    st.success(f"Found {len(st.session_state.all_logs)} logs.")
 
-        # Persist selection outside the button click
         if st.session_state.all_logs:
             st.divider()
             selected_disp = st.multiselect("Select Files:", options=[f['display'] for f in st.session_state.all_logs])
@@ -167,15 +174,30 @@ if check_password():
                     st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
 
     # ==============================================================================
-    # SECTION 4: MAIN CONTENT
+    # SECTION 4: MAIN CONTENT (LOG SCANNING)
     # ==============================================================================
     col1, col2 = st.columns([1, 2.3])
     with col1:
         st.markdown("### 🛠️ Advanced Log Filtering")
         uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
-        # ... [Scanning Logic remains here] ...
+        
+        if uploaded_files:
+            player_hits = []
+            for f in uploaded_files:
+                content = f.read().decode("utf-8", errors="ignore")
+                # Pattern for kills or positions: (pos=<X, Y, Z>)
+                pattern = r"(\d{2}:\d{2}:\d{2}).*?pos=<([\d\.]+), ([\d\.]+), ([\d\.]+)>"
+                matches = re.findall(pattern, content)
+                for m in matches:
+                    player_hits.append({"Time": m[0], "X": float(m[1]), "Z": float(m[3])})
+            
+            if player_hits:
+                df = pd.DataFrame(player_hits)
+                st.dataframe(df, use_container_width=True)
+                if st.button("📍 Update Map Position"):
+                    st.session_state.mv += 1
+                    st.success(f"Centered map on latest log entry!")
 
     with col2:
         st.markdown("<h4 style='text-align: center;'>📍 iSurvive Serverlogs Map</h4>", unsafe_allow_html=True)
         components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
-    
