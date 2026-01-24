@@ -56,7 +56,6 @@ if check_password():
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
     
     if 'mv' not in st.session_state: st.session_state.mv = 0
-    if 'track_data' not in st.session_state: st.session_state.track_data = None
     if 'all_logs' not in st.session_state: st.session_state.all_logs = []
 
     st.markdown("""
@@ -65,43 +64,45 @@ if check_password():
         section[data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d; }
         .stMarkdown, p, label, .stSubheader, .stHeader, h1, h2, h3, h4, span { color: #8b949e !important; }
         div.stButton > button { color: #c9d1d9 !important; background-color: #21262d !important; border: 1px solid #30363d !important; font-weight: bold !important; border-radius: 6px; }
-        .death-log { color: #ff7b72 !important; font-weight: bold; border-left: 3px solid #f85149; padding-left: 10px; margin-bottom: 5px;}
-        .connect-log { color: #3fb950 !important; border-left: 3px solid #3fb950; padding-left: 10px; margin-bottom: 5px;}
         </style>
         """, unsafe_allow_html=True)
 
-    # UPDATED FTP CONFIGURATION FOR DAYZ PSN
+    # FTP CREDENTIALS
     FTP_HOST = "usla643.gamedata.io"
     FTP_USER = "ni11109181_1"
     FTP_PASS = "343mhfxd"
-    FTP_PATH = "/dayzps/config" # Explicit path to Nitrado Config folder
+    TARGET_DIR = "/dayzps/config"
 
     def get_ftp_connection():
         try:
-            ftp = FTP(FTP_HOST, timeout=15)
+            ftp = FTP(FTP_HOST, timeout=20)
             ftp.login(user=FTP_USER, passwd=FTP_PASS)
-            # Robust path navigation
-            path_parts = FTP_PATH.strip("/").split("/")
-            ftp.cwd("/") # Start from root
-            for part in path_parts:
-                ftp.cwd(part)
+            
+            # Step-by-step navigation to ensure path exists
+            ftp.cwd("/")
+            for folder in ["dayzps", "config"]:
+                try:
+                    ftp.cwd(folder)
+                except:
+                    st.sidebar.error(f"Could not find folder: {folder}")
+                    return None
             return ftp
         except Exception as e:
             st.error(f"FTP Connection Failed: {e}")
             return None
 
     def extract_dt_from_filename(filename):
+        # Pattern for DayZ log format: 2026-01-23_12-30-05
         try:
             match = re.search(r'(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})', filename)
             if match:
-                date_part = match.group(1)
-                time_part = match.group(2).replace('-', ':')
-                return datetime.strptime(f"{date_part} {time_part}", "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC)
+                dt_str = f"{match.group(1)} {match.group(2).replace('-', ':')}"
+                return datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC)
         except: pass
         return None
 
     # ==============================================================================
-    # SECTION 3: SIDEBAR (FTP SYNC & ZIP)
+    # SECTION 3: SIDEBAR (LOG SYNC)
     # ==============================================================================
     with st.sidebar:
         st.markdown("### 🐺 Admin Portal")
@@ -117,9 +118,9 @@ if check_password():
         if st.button("🔄 Sync FTP List", use_container_width=True):
             ftp = get_ftp_connection()
             if ftp:
-                with st.spinner("Fetching logs from /dayzps/config..."):
+                with st.spinner("Scanning /dayzps/config..."):
                     files_raw = []
-                    # Try MLSD first, fallback to LIST if node is older
+                    # Use MLSD for detailed file info, fallback to NLST for just names
                     try:
                         ftp.retrlines('MLSD', files_raw.append)
                     except:
@@ -134,16 +135,23 @@ if check_password():
                     now_utc = datetime.now(pytz.UTC)
                     
                     for line in files_raw:
+                        # Parse MLSD format or LIST format to get the filename
                         filename = line.split(';')[-1].strip() if ';' in line else line.split()[-1]
-                        if filename.upper().endswith(tuple(allowed_ext)):
+                        
+                        if any(filename.upper().endswith(ext) for ext in allowed_ext):
                             dt = extract_dt_from_filename(filename)
+                            
+                            # Fallback if filename date extraction fails
                             if not dt:
                                 try:
-                                    # Fallback for modified time if filename doesn't have it
-                                    m_str = next(p for p in line.split(';') if 'modify=' in p).split('=')[1]
-                                    dt = datetime.strptime(m_str, "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
+                                    if 'modify=' in line:
+                                        m_str = next(p for p in line.split(';') if 'modify=' in p).split('=')[1]
+                                        dt = datetime.strptime(m_str, "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
+                                    else:
+                                        dt = now_utc # Default to now if no metadata
                                 except: continue
                             
+                            # Filtering Logic
                             include = True
                             if range_mode == "Today": include = dt.date() == now_utc.date()
                             elif range_mode == "Last 24h": include = dt > (now_utc - timedelta(hours=24))
@@ -154,11 +162,15 @@ if check_password():
                     
                     st.session_state.all_logs = sorted(processed, key=lambda x: x['dt'], reverse=True)
                     ftp.quit()
-                    st.success(f"Found {len(st.session_state.all_logs)} logs.")
+                    
+                    if not st.session_state.all_logs:
+                        st.sidebar.warning("No matching files found in /dayzps/config.")
+                    else:
+                        st.sidebar.success(f"Loaded {len(st.session_state.all_logs)} logs.")
 
         if st.session_state.all_logs:
             st.divider()
-            selected_disp = st.multiselect("Select Files:", options=[f['display'] for f in st.session_state.all_logs])
+            selected_disp = st.multiselect("Select Logs:", options=[f['display'] for f in st.session_state.all_logs])
             
             if selected_disp and st.button("📦 Prepare ZIP", use_container_width=True):
                 buf = io.BytesIO()
@@ -166,38 +178,40 @@ if check_password():
                 if ftp_z:
                     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
                         for disp in selected_disp:
-                            real = next(f['real'] for f in st.session_state.all_logs if f['display'] == disp)
-                            fbuf = io.BytesIO()
-                            ftp_z.retrbinary(f"RETR {real}", fbuf.write)
-                            zf.writestr(real, fbuf.getvalue())
+                            real_name = next(f['real'] for f in st.session_state.all_logs if f['display'] == disp)
+                            f_data = io.BytesIO()
+                            ftp_z.retrbinary(f"RETR {real_name}", f_data.write)
+                            zf.writestr(real_name, f_data.getvalue())
                     ftp_z.quit()
                     st.download_button("💾 Download ZIP", buf.getvalue(), "dayz_logs.zip", use_container_width=True)
 
     # ==============================================================================
-    # SECTION 4: MAIN CONTENT (LOG SCANNING)
+    # SECTION 4: MAIN DASHBOARD
     # ==============================================================================
-    col1, col2 = st.columns([1, 2.3])
+    col1, col2 = st.columns([1, 2.5])
+    
     with col1:
-        st.markdown("### 🛠️ Advanced Log Filtering")
-        uploaded_files = st.file_uploader("Upload Admin Logs", accept_multiple_files=True)
+        st.markdown("### 🛠️ Log Processor")
+        uploaded_files = st.file_uploader("Upload or use synced logs", accept_multiple_files=True)
         
         if uploaded_files:
-            player_hits = []
+            hits = []
             for f in uploaded_files:
-                content = f.read().decode("utf-8", errors="ignore")
-                # Pattern for kills or positions: (pos=<X, Y, Z>)
+                text = f.read().decode("utf-8", errors="ignore")
+                # Updated Regex to find coordinates/positions in ADM logs
                 pattern = r"(\d{2}:\d{2}:\d{2}).*?pos=<([\d\.]+), ([\d\.]+), ([\d\.]+)>"
-                matches = re.findall(pattern, content)
+                matches = re.findall(pattern, text)
                 for m in matches:
-                    player_hits.append({"Time": m[0], "X": float(m[1]), "Z": float(m[3])})
+                    hits.append({"Time": m[0], "X": float(m[1]), "Z": float(m[3])})
             
-            if player_hits:
-                df = pd.DataFrame(player_hits)
-                st.dataframe(df, use_container_width=True)
-                if st.button("📍 Update Map Position"):
+            if hits:
+                df = pd.DataFrame(hits)
+                st.write("Latest Positions Found:")
+                st.dataframe(df.tail(10), use_container_width=True)
+                if st.button("📍 Center Map on Latest"):
                     st.session_state.mv += 1
-                    st.success(f"Centered map on latest log entry!")
 
     with col2:
-        st.markdown("<h4 style='text-align: center;'>📍 iSurvive Serverlogs Map</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='text-align: center;'>📍 Live Tracking Map</h4>", unsafe_allow_html=True)
+        # Using versioning parameter to force iframe refresh when coordinates update
         components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
