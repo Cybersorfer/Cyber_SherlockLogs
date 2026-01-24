@@ -77,8 +77,6 @@ if check_password():
         try:
             ftp = FTP(FTP_HOST, timeout=20)
             ftp.login(user=FTP_USER, passwd=FTP_PASS)
-            
-            # Step-by-step navigation to ensure path exists
             ftp.cwd("/")
             for folder in ["dayzps", "config"]:
                 try:
@@ -92,7 +90,6 @@ if check_password():
             return None
 
     def extract_dt_from_filename(filename):
-        # Pattern for DayZ log format: 2026-01-23_12-30-05
         try:
             match = re.search(r'(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})', filename)
             if match:
@@ -102,14 +99,19 @@ if check_password():
         return None
 
     # ==============================================================================
-    # SECTION 3: SIDEBAR (LOG SYNC)
+    # SECTION 3: SIDEBAR (RESTORED TIME SELECTION)
     # ==============================================================================
     with st.sidebar:
         st.markdown("### 🐺 Admin Portal")
         st.divider()
         st.header("Nitrado FTP Manager")
         
-        range_mode = st.selectbox("Range Mode:", ["Today", "Last 24h", "All Time"])
+        # RESTORED CALENDAR AND TIME OPTIONS
+        sel_date = st.date_input("Select Date:", datetime.now())
+        t_cols = st.columns(2)
+        start_t = t_cols[0].time_input("From:", time(0, 0))
+        end_t = t_cols[1].time_input("To:", time(23, 59))
+        
         cb_cols = st.columns(3)
         show_adm = cb_cols[0].checkbox("ADM", True)
         show_rpt = cb_cols[1].checkbox("RPT", True)
@@ -120,7 +122,6 @@ if check_password():
             if ftp:
                 with st.spinner("Scanning /dayzps/config..."):
                     files_raw = []
-                    # Use MLSD for detailed file info, fallback to NLST for just names
                     try:
                         ftp.retrlines('MLSD', files_raw.append)
                     except:
@@ -132,31 +133,26 @@ if check_password():
                     if show_rpt: allowed_ext.append(".RPT")
                     if show_log: allowed_ext.append(".LOG")
                     
-                    now_utc = datetime.now(pytz.UTC)
+                    # Convert selected inputs to offset-aware datetimes for comparison
+                    start_dt = datetime.combine(sel_date, start_t).replace(tzinfo=pytz.UTC)
+                    end_dt = datetime.combine(sel_date, end_t).replace(tzinfo=pytz.UTC)
                     
                     for line in files_raw:
-                        # Parse MLSD format or LIST format to get the filename
                         filename = line.split(';')[-1].strip() if ';' in line else line.split()[-1]
                         
                         if any(filename.upper().endswith(ext) for ext in allowed_ext):
                             dt = extract_dt_from_filename(filename)
                             
-                            # Fallback if filename date extraction fails
                             if not dt:
                                 try:
                                     if 'modify=' in line:
                                         m_str = next(p for p in line.split(';') if 'modify=' in p).split('=')[1]
                                         dt = datetime.strptime(m_str, "%Y%m%d%H%M%S").replace(tzinfo=pytz.UTC)
-                                    else:
-                                        dt = now_utc # Default to now if no metadata
+                                    else: continue
                                 except: continue
                             
-                            # Filtering Logic
-                            include = True
-                            if range_mode == "Today": include = dt.date() == now_utc.date()
-                            elif range_mode == "Last 24h": include = dt > (now_utc - timedelta(hours=24))
-                            
-                            if include:
+                            # Apply Time Frame Filter
+                            if start_dt <= dt <= end_dt:
                                 disp = f"{filename} ({dt.strftime('%I:%M %p').lower()})"
                                 processed.append({"real": filename, "dt": dt, "display": disp})
                     
@@ -164,7 +160,7 @@ if check_password():
                     ftp.quit()
                     
                     if not st.session_state.all_logs:
-                        st.sidebar.warning("No matching files found in /dayzps/config.")
+                        st.sidebar.warning("No logs found for this timeframe.")
                     else:
                         st.sidebar.success(f"Loaded {len(st.session_state.all_logs)} logs.")
 
@@ -198,7 +194,6 @@ if check_password():
             hits = []
             for f in uploaded_files:
                 text = f.read().decode("utf-8", errors="ignore")
-                # Updated Regex to find coordinates/positions in ADM logs
                 pattern = r"(\d{2}:\d{2}:\d{2}).*?pos=<([\d\.]+), ([\d\.]+), ([\d\.]+)>"
                 matches = re.findall(pattern, text)
                 for m in matches:
@@ -213,5 +208,4 @@ if check_password():
 
     with col2:
         st.markdown("<h4 style='text-align: center;'>📍 Live Tracking Map</h4>", unsafe_allow_html=True)
-        # Using versioning parameter to force iframe refresh when coordinates update
         components.iframe(f"https://www.izurvive.com/serverlogs/?v={st.session_state.mv}", height=800, scrolling=True)
