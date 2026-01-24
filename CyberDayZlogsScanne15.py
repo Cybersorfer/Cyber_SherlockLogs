@@ -99,18 +99,28 @@ if check_password():
         return None
 
     # ==============================================================================
-    # SECTION 3: SIDEBAR (RESTORED TIME SELECTION)
+    # SECTION 3: SIDEBAR (HOURLY TIME SELECTION)
     # ==============================================================================
     with st.sidebar:
         st.markdown("### 🐺 Admin Portal")
         st.divider()
         st.header("Nitrado FTP Manager")
         
-        # RESTORED CALENDAR AND TIME OPTIONS
+        # Date selection
         sel_date = st.date_input("Select Date:", datetime.now())
+        
+        # Generation of hourly labels (1:00am, 2:00am...)
+        hours_list = []
+        for h in range(24):
+            hour_dt = time(h, 0)
+            hours_list.append(hour_dt)
+        
+        def format_hour(t):
+            return t.strftime("%I:00%p").lower()
+
         t_cols = st.columns(2)
-        start_t = t_cols[0].time_input("From:", time(0, 0))
-        end_t = t_cols[1].time_input("To:", time(23, 59))
+        start_t_obj = t_cols[0].selectbox("From:", options=hours_list, format_func=format_hour, index=0)
+        end_t_obj = t_cols[1].selectbox("To:", options=hours_list, format_func=format_hour, index=23)
         
         cb_cols = st.columns(3)
         show_adm = cb_cols[0].checkbox("ADM", True)
@@ -133,9 +143,10 @@ if check_password():
                     if show_rpt: allowed_ext.append(".RPT")
                     if show_log: allowed_ext.append(".LOG")
                     
-                    # Convert selected inputs to offset-aware datetimes for comparison
-                    start_dt = datetime.combine(sel_date, start_t).replace(tzinfo=pytz.UTC)
-                    end_dt = datetime.combine(sel_date, end_t).replace(tzinfo=pytz.UTC)
+                    # Convert whole hour selections to datetimes for filtering
+                    start_dt = datetime.combine(sel_date, start_t_obj).replace(tzinfo=pytz.UTC)
+                    # End time is set to 59:59 of that hour to include all logs within that hour slot
+                    end_dt = datetime.combine(sel_date, end_t_obj).replace(hour=end_t_obj.hour, minute=59, second=59, tzinfo=pytz.UTC)
                     
                     for line in files_raw:
                         filename = line.split(';')[-1].strip() if ';' in line else line.split()[-1]
@@ -151,7 +162,6 @@ if check_password():
                                     else: continue
                                 except: continue
                             
-                            # Apply Time Frame Filter
                             if start_dt <= dt <= end_dt:
                                 disp = f"{filename} ({dt.strftime('%I:%M %p').lower()})"
                                 processed.append({"real": filename, "dt": dt, "display": disp})
