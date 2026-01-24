@@ -64,15 +64,13 @@ if check_password():
         section[data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d; }
         .stMarkdown, p, label, .stSubheader, .stHeader, h1, h2, h3, h4, span { color: #8b949e !important; }
         div.stButton > button { color: #c9d1d9 !important; background-color: #21262d !important; border: 1px solid #30363d !important; font-weight: bold !important; border-radius: 6px; }
-        .highlight-red { color: #ff7b72 !important; font-weight: bold; }
-        .highlight-green { color: #3fb950 !important; }
+        .death-log { color: #ff7b72 !important; font-weight: bold; border-left: 3px solid #f85149; padding-left: 10px; margin-bottom: 5px; background: #21262d; border-radius: 4px;}
         </style>
         """, unsafe_allow_html=True)
 
     FTP_HOST = "usla643.gamedata.io"
     FTP_USER = "ni11109181_1"
     FTP_PASS = "343mhfxd"
-    TARGET_DIR = "/dayzps/config"
 
     def get_ftp_connection():
         try:
@@ -110,6 +108,11 @@ if check_password():
         start_t_obj = t_cols[0].selectbox("From:", options=hours_list, format_func=format_hour, index=0)
         end_t_obj = t_cols[1].selectbox("To:", options=hours_list, format_func=format_hour, index=23)
         
+        # FIXED: Define timeframe variables outside of the button so zip naming can see them
+        start_date, end_date = (sel_dates[0], sel_dates[1]) if len(sel_dates) == 2 else (sel_dates[0], sel_dates[0])
+        global_start_dt = datetime.combine(start_date, start_t_obj).replace(tzinfo=pytz.UTC)
+        global_end_dt = datetime.combine(end_date, end_t_obj).replace(hour=end_t_obj.hour, minute=59, second=59, tzinfo=pytz.UTC)
+
         cb_cols = st.columns(3)
         show_adm = cb_cols[0].checkbox("ADM", True)
         show_rpt = cb_cols[1].checkbox("RPT", True)
@@ -125,15 +128,11 @@ if check_password():
                 processed = []
                 allowed_ext = [ext for ext, s in [(".ADM", show_adm), (".RPT", show_rpt), (".LOG", show_log)] if s]
                 
-                start_date, end_date = (sel_dates[0], sel_dates[1]) if len(sel_dates) == 2 else (sel_dates[0], sel_dates[0])
-                start_dt = datetime.combine(start_date, start_t_obj).replace(tzinfo=pytz.UTC)
-                end_dt = datetime.combine(end_date, end_t_obj).replace(hour=end_t_obj.hour, minute=59, second=59, tzinfo=pytz.UTC)
-                
                 for line in files_raw:
                     filename = line.split(';')[-1].strip() if ';' in line else line.split()[-1]
                     if any(filename.upper().endswith(ext) for ext in allowed_ext):
                         dt = extract_dt_from_filename(filename)
-                        if dt and start_dt <= dt <= end_dt:
+                        if dt and global_start_dt <= dt <= global_end_dt:
                             disp = f"{filename} ({dt.strftime('%I:%M %p').lower()})"
                             processed.append({"real": filename, "dt": dt, "display": disp})
                 
@@ -148,8 +147,8 @@ if check_password():
             selected_disp = st.multiselect("Select Logs:", options=log_options, default=log_options if select_all else None)
             
             if selected_disp and st.button("📦 Prepare ZIP", use_container_width=True):
-                # Dynamic ZIP Naming
-                zip_name = f"Logs_{start_dt.strftime('%Y-%m-%d_%H%M')}_to_{end_dt.strftime('%Y-%m-%d_%H%M')}.zip"
+                # FIXED: Uses the pre-calculated global datetimes for the name
+                zip_name = f"Logs_{global_start_dt.strftime('%Y-%m-%d_%H%M')}_to_{global_end_dt.strftime('%Y-%m-%d_%H%M')}.zip"
                 buf = io.BytesIO()
                 ftp_z = get_ftp_connection()
                 if ftp_z:
@@ -163,9 +162,9 @@ if check_password():
                     st.download_button(f"💾 Download {zip_name}", buf.getvalue(), zip_name, use_container_width=True)
 
     # ==============================================================================
-    # SECTION 4: MAIN CONTENT (LOG PROCESSOR RESTORED)
+    # SECTION 4: MAIN CONTENT (RESTORED LOG PROCESSOR)
     # ==============================================================================
-    col1, col2 = st.columns([1.2, 2.3])
+    col1, col2 = st.columns([1.3, 2.3])
     
     with col1:
         st.markdown("### 🛠️ Ultimate Log Processor")
@@ -187,27 +186,49 @@ if check_password():
                     st.dataframe(df, use_container_width=True)
             
             elif analysis_mode == "Building Activity":
-                build_pattern = r"(\d{2}:\d{2}:\d{2}).*?(built|placed|dismantled).*?at pos=<([\d\.]+), ([\d\.]+), ([\d\.]+)>"
+                st.subheader("🏗️ Construction & Deconstruction")
+                # Restored: Scans for built/placed/dismantled/destroyed actions
+                build_pattern = r"(\d{2}:\d{2}:\d{2}).*?(built|placed|dismantled|destroyed).*?at pos=<([\d\.]+), ([\d\.]+), ([\d\.]+)>"
                 builds = re.findall(build_pattern, full_text, re.IGNORECASE)
-                st.write(pd.DataFrame(builds, columns=["Time", "Action", "X", "Y", "Z"]))
+                if builds:
+                    st.write(pd.DataFrame(builds, columns=["Time", "Action", "X", "Y", "Z"]))
+                else:
+                    st.info("No building activity found.")
 
             elif analysis_mode == "Raid Watch":
-                raid_items = "Explosive|Plastic|Grenade|Claymore|Detonator"
+                st.subheader("🧨 Explosives & Raid Items")
+                # Restored: Specifically looks for high-tier raid items usage
+                raid_items = "Explosive|Plastic|Grenade|Claymore|Detonator|Mine"
                 raids = [line for line in full_text.split('\n') if re.search(raid_items, line, re.I)]
-                for r in raids[-20:]: st.markdown(f"<div class='death-log'>{r}</div>", unsafe_allow_html=True)
+                if raids:
+                    for r in raids[-30:]: st.markdown(f"<div class='death-log'>{r}</div>", unsafe_allow_html=True)
+                else:
+                    st.info("No raid-related items detected in logs.")
 
             elif analysis_mode == "Suspicious Activity":
-                # Scans for high-value items or rapid movement
-                sus = [line for line in full_text.split('\n') if "admin" in line.lower() or "teleport" in line.lower()]
-                st.write(sus if sus else "No immediate red flags found.")
+                st.subheader("🚨 Admin & Speed Checks")
+                # Restored: Scans for teleports and admin commands
+                sus_pattern = r"admin|teleport|speed|jump|cheater|banned"
+                sus_logs = [line for line in full_text.split('\n') if re.search(sus_pattern, line, re.I)]
+                if sus_logs:
+                    st.warning(f"Found {len(sus_logs)} potentially suspicious entries.")
+                    st.text_area("Suspicious Logs", "\n".join(sus_logs), height=300)
+                else:
+                    st.info("No suspicious patterns found.")
 
             elif analysis_mode == "Player Search":
-                p_name = st.text_input("Enter Player Name or ID:")
+                st.subheader("👤 Deep Player Scan")
+                # Restored: Full activity history for a specific name/ID/position
+                p_name = st.text_input("Enter Player Name, Steam/PSN ID, or partial name:")
                 if p_name:
                     p_activity = [line for line in full_text.split('\n') if p_name.lower() in line.lower()]
-                    st.text_area("Full Player History", "\n".join(p_activity), height=400)
+                    if p_activity:
+                        st.success(f"Found {len(p_activity)} actions for '{p_name}'")
+                        st.text_area("Activity History", "\n".join(p_activity), height=400)
+                    else:
+                        st.error("No data found for that player.")
 
-            if st.button("📍 Plot Activity on Map"):
+            if st.button("📍 Plot Results on Map"):
                 st.session_state.mv += 1
 
     with col2:
