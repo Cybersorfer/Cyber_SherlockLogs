@@ -50,14 +50,16 @@ def check_password():
     return False
 
 # ==============================================================================
-# MAIN APPLICATION BLOCK (Indented correctly under the IF statement)
+# MAIN APPLICATION BLOCK
 # ==============================================================================
 if check_password():
     st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
     
+    # Session State Initialization
     if 'mv' not in st.session_state: st.session_state.mv = 0
     if 'all_logs' not in st.session_state: st.session_state.all_logs = []
     if 'track_data' not in st.session_state: st.session_state.track_data = {}
+    if 'raw_download' not in st.session_state: st.session_state.raw_download = ""
 
     st.markdown("""
         <style>
@@ -221,6 +223,12 @@ if check_password():
     with col1:
         st.markdown("### 🛠️ Ultimate Log Processor")
         uploaded_files = st.file_uploader("Upload Logs", accept_multiple_files=True)
+        
+        # Reset if no files
+        if not uploaded_files:
+            st.session_state.track_data = {}
+            st.session_state.raw_download = ""
+
         if uploaded_files:
             mode = st.selectbox("Mode", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity", "Area Activity Search"])
             t_p, area_coords, area_radius = None, None, 500
@@ -247,18 +255,27 @@ if check_password():
                         val_x, val_z = c1.number_input("X", value=0.0), c2.number_input("Z", value=0.0)
                     area_coords = [val_x, val_z]
                 else: area_coords = presets[loc]
-                area_radius = st.slider("Radius", 50, 5000, 500)
+                area_radius = st.slider("Radius (Meters)", 50, 5000, 500)
             
             if st.button("🚀 Process Logs", use_container_width=True):
-                report, raw = filter_logs(uploaded_files, mode, t_p, area_coords, area_radius)
-                st.session_state.track_data = report
-                st.session_state.raw_download = raw
+                with st.spinner("Analyzing..."):
+                    report, raw = filter_logs(uploaded_files, mode, t_p, area_coords, area_radius)
+                    if report:
+                        st.session_state.track_data = report
+                        st.session_state.raw_download = raw
+                        st.success(f"Found activity for {len(report)} players")
+                    else:
+                        st.session_state.track_data = {}
+                        st.warning("No matches found.")
 
+        # Display persistent results
         if st.session_state.track_data:
             try:
-                f_n = f"FILTERED_{mode.replace(' ', '_')}_{date_range[0].strftime('%m-%d')}.adm"
+                f_s, f_e = date_range[0].strftime('%m-%d'), date_range[1].strftime('%m-%d')
+                f_n = f"FILTERED_{mode.replace(' ', '_')}_{f_s}_to_{f_e}.adm"
             except: f_n = "FILTERED_LOGS.adm"
-            st.download_button("💾 Save Filtered ADM", st.session_state.get("raw_download", ""), f_n)
+            
+            st.download_button("💾 Save Filtered ADM", st.session_state.raw_download, f_n)
             for player, events in st.session_state.track_data.items():
                 with st.expander(f"👤 {player} ({len(events)} events)"):
                     for ev in events:
