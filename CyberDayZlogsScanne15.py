@@ -99,21 +99,18 @@ if check_password():
         return None
 
     # ==============================================================================
-    # SECTION 3: SIDEBAR (HOURLY TIME SELECTION)
+    # SECTION 3: SIDEBAR (RESTORED TIME SELECTION)
     # ==============================================================================
     with st.sidebar:
         st.markdown("### 🐺 Admin Portal")
         st.divider()
         st.header("Nitrado FTP Manager")
         
-        # Date selection
-        sel_date = st.date_input("Select Date:", datetime.now())
+        # Date Range Selection (Start and End)
+        sel_dates = st.date_input("Select Date Range:", [datetime.now(), datetime.now()])
         
         # Generation of hourly labels (1:00am, 2:00am...)
-        hours_list = []
-        for h in range(24):
-            hour_dt = time(h, 0)
-            hours_list.append(hour_dt)
+        hours_list = [time(h, 0) for h in range(24)]
         
         def format_hour(t):
             return t.strftime("%I:00%p").lower()
@@ -143,10 +140,14 @@ if check_password():
                     if show_rpt: allowed_ext.append(".RPT")
                     if show_log: allowed_ext.append(".LOG")
                     
-                    # Convert whole hour selections to datetimes for filtering
-                    start_dt = datetime.combine(sel_date, start_t_obj).replace(tzinfo=pytz.UTC)
-                    # End time is set to 59:59 of that hour to include all logs within that hour slot
-                    end_dt = datetime.combine(sel_date, end_t_obj).replace(hour=end_t_obj.hour, minute=59, second=59, tzinfo=pytz.UTC)
+                    # Handle date range tuple
+                    if len(sel_dates) == 2:
+                        start_date, end_date = sel_dates
+                    else:
+                        start_date = end_date = sel_dates[0]
+
+                    start_dt = datetime.combine(start_date, start_t_obj).replace(tzinfo=pytz.UTC)
+                    end_dt = datetime.combine(end_date, end_t_obj).replace(hour=end_t_obj.hour, minute=59, second=59, tzinfo=pytz.UTC)
                     
                     for line in files_raw:
                         filename = line.split(';')[-1].strip() if ';' in line else line.split()[-1]
@@ -176,7 +177,15 @@ if check_password():
 
         if st.session_state.all_logs:
             st.divider()
-            selected_disp = st.multiselect("Select Logs:", options=[f['display'] for f in st.session_state.all_logs])
+            
+            # Select All Option
+            select_all = st.checkbox("Select All Logs")
+            log_options = [f['display'] for f in st.session_state.all_logs]
+            
+            if select_all:
+                selected_disp = st.multiselect("Select Logs:", options=log_options, default=log_options)
+            else:
+                selected_disp = st.multiselect("Select Logs:", options=log_options)
             
             if selected_disp and st.button("📦 Prepare ZIP", use_container_width=True):
                 buf = io.BytesIO()
