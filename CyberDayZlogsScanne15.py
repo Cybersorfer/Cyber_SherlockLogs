@@ -5,13 +5,13 @@ from ftplib import FTP
 import io
 import zipfile
 import math
-import requests
+import sqlite3
 from datetime import datetime, timedelta, time
 import pytz 
 import streamlit.components.v1 as components
 
 # ==============================================================================
-# SECTION 1: TEAM ACCESS CONTROL
+# SECTION 1: TEAM ACCESS CONTROL (Unchanged)
 # ==============================================================================
 team_accounts = {
     "cybersorfer": "cyber001",
@@ -73,6 +73,7 @@ if check_password():
         .death-log { color: #ff4b4b !important; font-weight: bold; border-left: 3px solid #ff4b4b; padding-left: 10px; margin-bottom: 5px; background: #2a1212; }
         .connect-log { color: #28a745 !important; border-left: 3px solid #28a745; padding-left: 10px; margin-bottom: 5px; background: #122a16; }
         .disconnect-log { color: #ffc107 !important; border-left: 3px solid #ffc107; padding-left: 10px; margin-bottom: 5px; background: #2a2612; }
+        .hotspot-log { color: #00d4ff !important; border-left: 3px solid #00d4ff; padding-left: 10px; margin-bottom: 5px; background: #0e2433; }
         </style>
         """, unsafe_allow_html=True)
 
@@ -86,7 +87,6 @@ if check_password():
             return ftp
         except: return None
 
-    # Logic Helpers
     def make_izurvive_link(coords):
         if coords: return f"https://www.izurvive.com/chernarusplus/#location={coords[0]};{coords[1]}"
         return ""
@@ -98,7 +98,7 @@ if check_password():
             if "pos=<" in line:
                 raw = line.split("pos=<")[1].split(">")[0]
                 parts = [p.strip() for p in raw.split(",")]
-                coords = [float(parts[0]), float(parts[1])] 
+                coords = [float(parts[0]), float(parts[2] if len(parts)>2 else parts[1])] 
         except: pass 
         return str(name), coords
 
@@ -106,10 +106,52 @@ if check_password():
         if not p1 or not p2: return 999999
         return math.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2)
 
+    # --- NEW: VEHICLE & BASE TRACKER LOGIC ---
+    def process_hotspots(files):
+        # Create an in-memory database for fast processing
+        db = sqlite3.connect(":memory:")
+        cursor = db.cursor()
+        cursor.execute("CREATE TABLE records (file TEXT, text TEXT, x REAL, z REAL)")
+        
+        target_keys = ["Transport", "Placement", "built", "constructed"]
+        
+        for uploaded_file in files:
+            uploaded_file.seek(0)
+            content = uploaded_file.read().decode("utf-8", errors="ignore")
+            for line in content.splitlines():
+                if any(k in line for k in target_keys):
+                    name, coords = extract_player_and_coords(line)
+                    if coords:
+                        cursor.execute("INSERT INTO records VALUES (?, ?, ?, ?)", 
+                                       (uploaded_file.name, line.strip()[:100], coords[0], coords[1]))
+        
+        # Identify coordinates seen in more than one restart/file
+        cursor.execute("""
+            SELECT x, z, COUNT(DISTINCT file) as count, GROUP_CONCAT(DISTINCT file) 
+            FROM records GROUP BY x, z HAVING count > 1 ORDER BY count DESC
+        """)
+        results = cursor.fetchall()
+        
+        hotspot_report = {"Hotspots Found": []}
+        raw_out = "HOTSPOT REPORT\n================\n"
+        for x, z, count, files_list in results:
+            entry = {
+                "time": f"Seen in {count} logs",
+                "text": f"Asset detected at {x}, {z} (Persistent across restarts)",
+                "link": make_izurvive_link([x, z]),
+                "status": "hotspot"
+            }
+            hotspot_report["Hotspots Found"].append(entry)
+            raw_out += f"COORD: {x}, {z} | Restarts: {count} | Logs: {files_list}\n"
+            
+        return hotspot_report, raw_out
+
     def filter_logs(files, mode, target_player=None, area_coords=None, area_radius=500):
+        if mode == "Vehicle & Base Tracker":
+            return process_hotspots(files)
+
         grouped_report, boosting_tracker = {}, {}
         raw_filtered_lines = []
-        
         now_str = datetime.now().strftime("%Y-%m-%d at %H:%M:%S")
         header = f"******************************************************************************\nAdminLog started on {now_str}\n\n"
 
@@ -167,7 +209,7 @@ if check_password():
                     
         return grouped_report, header + "".join(raw_filtered_lines)
 
-    # --- SIDEBAR & FTP ---
+    # --- SIDEBAR & FTP (Unchanged) ---
     with st.sidebar:
         st.markdown("### 🐺 Admin Portal")
         st.divider()
@@ -227,8 +269,9 @@ if check_password():
         st.markdown("### 🛠️ Ultimate Log Processor")
         uploaded_files = st.file_uploader("Upload Logs", accept_multiple_files=True)
         if uploaded_files:
-            mode = st.selectbox("Mode", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity", "Area Activity Search"])
-            st.session_state.current_mode = mode # Track mode for file naming
+            # ADDED NEW MODE HERE
+            mode = st.selectbox("Mode", ["Full Activity per Player", "Session Tracking (Global)", "Building Only (Global)", "Raid Watch (Global)", "Suspicious Boosting Activity", "Area Activity Search", "Vehicle & Base Tracker"])
+            st.session_state.current_mode = mode 
             
             t_p, area_coords, area_radius = None, None, 500
             if mode == "Full Activity per Player":
@@ -239,7 +282,6 @@ if check_password():
                 t_p = st.selectbox("Player", sorted(list(names)))
             
             elif mode == "Area Activity Search":
-                # RESTORED COORDS PASTE FEATURE
                 presets = {"Custom / Paste": None, "Tisy": [1542, 13915], "NWAF": [4530, 10245], "VMC": [3824, 8912]}
                 loc = st.selectbox("Locations", list(presets.keys()))
                 if loc == "Custom / Paste":
@@ -263,8 +305,7 @@ if check_password():
                     st.session_state.track_data, st.session_state.raw_download = report, raw
 
         if st.session_state.get("track_data"):
-            # DYNAMIC FILENAME BASED ON FILTER
-            clean_mode = st.session_state.current_mode.replace(" ", "_").replace("(", "").replace(")", "")
+            clean_mode = st.session_state.current_mode.replace(" ", "_")
             file_name = f"{clean_mode}.adm"
             st.download_button(f"💾 Save {file_name}", st.session_state.raw_download, file_name)
             
