@@ -14,12 +14,10 @@ FTP_PATH = "/dayzps/config"
 
 # --- CORE FUNCTIONS ---
 def connect_ftp():
-    """Establishes connection and forces BINARY mode."""
+    """Establishes connection."""
     try:
         ftp = ftplib.FTP(FTP_HOST)
         ftp.login(FTP_USER, FTP_PASS)
-        # FIX: Force Binary Mode immediately to fix '550 SIZE' error
-        ftp.voidcmd("TYPE I") 
         return ftp
     except Exception as e:
         st.error(f"FTP Connection Failed: {e}")
@@ -29,10 +27,9 @@ def get_latest_files(ftp):
     """Finds the newest RPT (Live) and ADM (Building) files."""
     try:
         ftp.cwd(FTP_PATH)
-        # Using nlst() which is safer than mlsd() on some servers
+        # Listing files often forces the server into ASCII mode
         files = ftp.nlst()
         
-        # Sort by name (names contain timestamps: DayZServer...2026_01_25...)
         rpt_files = sorted([f for f in files if f.lower().endswith(".rpt")])
         adm_files = sorted([f for f in files if f.lower().endswith(".adm")])
         
@@ -45,9 +42,12 @@ def get_latest_files(ftp):
         return {"RPT": None, "ADM": None}
 
 def fetch_new_data(ftp, filename, last_size):
-    """Smart Fetch: Checks size in BINARY mode and downloads if newer."""
+    """Smart Fetch: Checks size and downloads if newer."""
     try:
-        # This command (SIZE) caused the error before; it should work now in TYPE I
+        # CRITICAL FIX: Force Binary Mode before checking size
+        # This fixes the "550 SIZE not allowed in ASCII mode" error
+        ftp.voidcmd("TYPE I")
+        
         current_size = ftp.size(filename)
         
         # If file hasn't grown, skip download
@@ -67,7 +67,6 @@ def fetch_new_data(ftp, filename, last_size):
 def parse_live_events(content, file_type):
     """Extracts high-value events."""
     events = []
-    # Decode with 'replace' to prevent crashing on weird characters
     decoded = content.decode('latin-1', errors='replace')
     lines = decoded.split('\n')
     
@@ -75,34 +74,27 @@ def parse_live_events(content, file_type):
         clean_line = line.strip()
         if not clean_line: continue
         
-        # Timestamp extraction (first 8 chars usually HH:MM:SS)
         ts = clean_line[:8] if len(clean_line) > 8 and ":" in clean_line[:8] else "Unknown"
         
-        # --- RPT EVENTS (LIVE) ---
         if file_type == "RPT":
             if "Player" in line and "connected" in line:
                 events.append({"Time": ts, "Type": "🟢 Connect", "Details": clean_line})
             elif "Player" in line and "disconnected" in line:
                 events.append({"Time": ts, "Type": "🔴 Disconnect", "Details": clean_line})
-            elif "hit by" in line or "killed by" in line or "died" in line:
+            elif any(k in line for k in ["hit by", "killed by", "died"]):
                 events.append({"Time": ts, "Type": "💀 KILLFEED", "Details": clean_line})
             elif "VehicleRespawner" in line and "Respawning" in line:
                 events.append({"Time": ts, "Type": "🚗 Vehicle Spawn", "Details": clean_line})
 
-        # --- ADM EVENTS (DELAYED/BUFFERED) ---
         elif file_type == "ADM":
-            # Building/Dismantling
             if "placed" in line or "built" in line:
                 events.append({"Time": ts, "Type": "🔨 Building", "Details": clean_line})
             elif "dismantled" in line:
                 events.append({"Time": ts, "Type": "🪓 Dismantle", "Details": clean_line})
-            
-            # Movement/Position (Only capture if it has coordinates)
             elif "pos=<" in line:
-                # We typically only care about movement related to other events, 
-                # but if you want RAW movement, un-comment the next lines:
-                # events.append({"Time": ts, "Type": "📍 Position", "Details": clean_line})
-                pass
+                # To reduce spam, we only log pos if it's explicitly about building/transport
+                if any(x in line for x in ["placed", "Transport", "built"]):
+                    events.append({"Time": ts, "Type": "📍 Position", "Details": clean_line})
 
     return events
 
@@ -134,34 +126,33 @@ with col1:
                     content, new_size = fetch_new_data(ftp, files['RPT'], st.session_state.last_rpt_size)
                     if content:
                         batch = parse_live_events(content, "RPT")
-                        
-                        # Logic: If first run, show last 10. If update, show new ones.
-                        # Simple logic: Just grab last 10 for display to avoid complexity
-                        st.session_state.live_feed = batch[-20:] + st.session_state.live_feed
+                        # Logic to only show latest lines on update
+                        show_count = 10 if st.session_state.last_rpt_size == 0 else 5
+                        st.session_state.live_feed = batch[-show_count:] + st.session_state.live_feed
                         
                         st.session_state.last_rpt_size = new_size
                         new_events_found += len(batch)
-                        st.success(f"RPT: Read {new_size} bytes")
+                        st.toast(f"RPT Updated: {files['RPT']}")
                 
                 # 2. Process ADM (Building Data)
                 if files['ADM']:
                     content, new_size = fetch_new_data(ftp, files['ADM'], st.session_state.last_adm_size)
                     if content:
                         batch = parse_live_events(content, "ADM")
-                        
-                        st.session_state.live_feed = batch[-20:] + st.session_state.live_feed
+                        show_count = 10 if st.session_state.last_adm_size == 0 else 5
+                        st.session_state.live_feed = batch[-show_count:] + st.session_state.live_feed
                         
                         st.session_state.last_adm_size = new_size
                         new_events_found += len(batch)
-                        st.success(f"ADM: Read {new_size} bytes")
+                        st.toast(f"ADM Updated: {files['ADM']}")
 
                 ftp.quit()
                 
-                # Limit feed size
+                # Keep feed manageable (last 100 events)
                 st.session_state.live_feed = st.session_state.live_feed[:100]
                 
                 if new_events_found == 0:
-                    st.info("No new activity detected.")
+                    st.info("No new activity since last check.")
 
     # Status Display
     st.metric("Events in Feed", len(st.session_state.live_feed))
@@ -170,13 +161,8 @@ with col1:
 
 with col2:
     st.subheader("📢 Activity Feed")
-    
     if st.session_state.live_feed:
-        # Sort feed by time descending (optional, depending on how you want to see it)
-        # For now, we display the list as appended (Latest scans on top logic handled above)
-        
         for event in st.session_state.live_feed:
-            # Color coding
             color = "gray"
             if "Connect" in event['Type']: color = "green"
             if "Disconnect" in event['Type']: color = "red"
