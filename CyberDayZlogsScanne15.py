@@ -1,66 +1,149 @@
 import streamlit as st
-import requests
+import pandas as pd
+import ftplib
+import io
+import re
+from datetime import datetime
 
-# --- CONFIGURATION ---
-API_TOKEN = "CWBuIFx8j-KkbXDO0r6WGiBAtP_KSUiz11iQFxuB4jkU6r0wm9E9G1rcr23GuSfI8k6ldPOWseNuieSUnuV6UXPSSGzMWxzat73F"
-SERVICE_ID = "18159994"
+# --- 1. CREDENTIALS (FROM YOUR ORIGINAL SCRIPT) ---
+FTP_HOST = "usla643.gamedata.io"
+FTP_USER = "ni11109181_1"
+FTP_PASS = "343mhfxd"
+# We confirmed this path via your logs earlier
+FTP_PATH = "/dayzps/config"
 
-def get_api_headers():
-    return {"Authorization": f"Bearer {API_TOKEN}"}
-
-def try_download(path_guess):
-    """Attempts to download a specific file without listing directory first."""
-    # Ensure no leading slash for relative path
-    clean_path = path_guess.lstrip("/")
-    
-    url = f"https://api.nitrado.net/services/{SERVICE_ID}/gameservers/file_server/download?file={clean_path}"
+# --- 2. CORE FUNCTIONS ---
+def connect_ftp():
+    """Establishes connection to Nitrado FTP."""
     try:
-        res = requests.get(url, headers=get_api_headers())
-        
-        # DEBUG: Print status to help troubleshoot
-        st.write(f"Testing `{clean_path}` -> Status: {res.status_code}")
-        
-        if res.status_code == 200:
-            return True, res.json()['data']['token']['url']
-        return False, None
+        ftp = ftplib.FTP(FTP_HOST)
+        ftp.login(FTP_USER, FTP_PASS)
+        return ftp
     except Exception as e:
-        st.error(f"Error: {e}")
-        return False, None
+        st.error(f"FTP Connection Failed: {e}")
+        return None
 
-st.set_page_config(page_title="DayZ Anchor Test")
-st.title("⚓ Path Triangulation (Blind Grab)")
-st.info("Since 'List Files' is blocked, we will try to grab known files directly.")
+def get_latest_log(ftp, file_extension=".ADM"):
+    """Finds the most recent log file in the config folder."""
+    try:
+        ftp.cwd(FTP_PATH)
+        files = []
+        
+        # Get list of files with details to sort by date
+        # Note: FTP listing can be tricky, we'll try a simple nlst and sort by name first
+        # since DayZ logs usually contain timestamps in the name.
+        filenames = ftp.nlst()
+        
+        # Filter for ADM logs
+        targets = [f for f in filenames if f.lower().endswith(file_extension.lower())]
+        
+        if not targets:
+            return None
+            
+        # Sort files (assuming standard naming allows sort by name, otherwise we'd need MDTM)
+        targets.sort()
+        latest_file = targets[-1] # The last one is usually the newest
+        return latest_file
+    except Exception as e:
+        st.error(f"Error finding logs: {e}")
+        return None
 
-if st.button("🚀 Run Connection Test"):
-    
-    st.subheader("Testing Theory 1: API is at Server Root")
-    # Path taken directly from your RPT logs
-    path1 = "dayzps/config/Users/Survivor/Server.core.xml"
-    found1, url1 = try_download(path1)
-    
-    if found1:
-        st.success("✅ **SUCCESS!** We downloaded `Server.core.xml`")
-        st.markdown(f"**CONCLUSION:** Your correct log path is: `dayzps/config`")
-        st.markdown("**Next Step:** We will build the scanner to blindly grab `.ADM` files from this path.")
-        st.stop()
-    
-    st.subheader("Testing Theory 2: API is already inside 'dayzps'")
-    # Try the same file, but assuming we are already in the dayzps folder
-    path2 = "config/Users/Survivor/Server.core.xml"
-    found2, url2 = try_download(path2)
-    
-    if found2:
-        st.success("✅ **SUCCESS!** We downloaded `Server.core.xml`")
-        st.markdown(f"**CONCLUSION:** Your correct log path is: `config`")
-        st.stop()
+def download_log_content(ftp, filename):
+    """Downloads the specific file into memory."""
+    try:
+        # Buffer to hold file in RAM
+        r_buffer = io.BytesIO()
+        ftp.retrbinary(f"RETR {filename}", r_buffer.write)
+        r_buffer.seek(0)
+        return r_buffer.read()
+    except Exception as e:
+        st.error(f"Download Error: {e}")
+        return None
 
-    st.error("❌ Both attempts failed.")
-    st.warning("""
-    **Diagnosis:** Your Nitrado Token likely has 'Gameserver' permissions but is missing **'File Server'** permissions.
+def parse_activity(content):
+    """Parses the log for Player and Base activity."""
+    data = []
+    # Decode latin-1 to handle special characters
+    decoded = content.decode('latin-1', errors='ignore')
     
-    **Fix:**
-    1. Go to Nitrado > Developer Portal.
-    2. Create a NEW Token.
-    3. CHECK the box that says **"Files" (Download/List/Upload)**.
-    4. Replace the token in this script.
-    """)
+    # Regex for coordinates (X, Z)
+    pos_pattern = re.compile(r"pos=<(\d+\.\d+),\s*\d+\.\d+,\s*(\d+\.\d+)>")
+    
+    for line in decoded.split('\n'):
+        # Keywords we care about
+        if any(k in line for k in ["placed", "built", "dismantled", "Transport", "killed", "died", "hit by"]):
+            timestamp = line[:8] if "|" not in line[:10] else "Live"
+            
+            # Extract Coordinates
+            coords = "N/A"
+            match = pos_pattern.search(line)
+            if match:
+                coords = f"{match.group(1)}, {match.group(2)}"
+            
+            # Categorize
+            category = "General"
+            if "Transport" in line: category = "🚗 Vehicle"
+            elif "placed" in line or "built" in line: category = "🔨 Base Building"
+            elif "killed" in line or "hit by" in line: category = "💀 PvP/Death"
+            
+            data.append({
+                "Time": timestamp,
+                "Category": category,
+                "Coords": coords,
+                "Event": line.strip()
+            })
+            
+    return pd.DataFrame(data)
+
+# --- 3. APP UI ---
+st.set_page_config(page_title="DayZ FTP Live Scanner", layout="wide")
+
+with st.sidebar:
+    st.title("📡 FTP Live Scanner")
+    st.info(f"Host: {FTP_HOST}\nPath: {FTP_PATH}")
+    
+    scan_mode = st.radio("Scan Target:", [".ADM (Activity)", ".RPT (System)"])
+    ext = ".ADM" if "ADM" in scan_mode else ".RPT"
+    
+    if st.button("🔥 SCAN NOW", use_container_width=True):
+        with st.spinner("Connecting to FTP..."):
+            ftp = connect_ftp()
+            if ftp:
+                st.session_state.ftp_status = "Connected"
+                
+                # Find Latest
+                target_file = get_latest_log(ftp, ext)
+                if target_file:
+                    st.success(f"Found: {target_file}")
+                    
+                    # Download
+                    content = download_log_content(ftp, target_file)
+                    if content:
+                        # Parse
+                        df = parse_activity(content)
+                        st.session_state.ftp_data = df
+                        st.session_state.current_file = target_file
+                    
+                else:
+                    st.warning(f"No {ext} files found in {FTP_PATH}")
+                
+                ftp.quit()
+
+# --- MAIN DISPLAY ---
+st.title("Cyber DayZ - Live Intelligence (FTP Mode)")
+
+if 'ftp_data' in st.session_state:
+    df = st.session_state.ftp_data
+    
+    col1, col2 = st.columns(2)
+    col1.metric("Events Detected", len(df))
+    col2.metric("Source Log", st.session_state.current_file)
+    
+    st.dataframe(df, use_container_width=True)
+    
+    # Export
+    csv = df.to_csv(index=False).encode('utf-8')
+    st.download_button("📥 Download Report", csv, "ftp_live_report.csv", "text/csv")
+
+else:
+    st.write("👈 Click **SCAN NOW** to pull live data directly via FTP.")
