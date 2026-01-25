@@ -5,11 +5,12 @@ import io
 import re
 from datetime import datetime
 
-# --- 1. NITRADO API HELPERS (Defined first to avoid NameErrors) ---
+# --- 1. NITRADO API CONFIGURATION ---
 # Your Long-Life Token
 API_TOKEN = "CWBuIFx8j-KkbXDO0r6WGiBAtP_KSUiz11iQFxuB4jkU6r0wm9E9G1rcr23GuSfI8k6ldPOWseNuieSUnuV6UXPSSGzMWxzat73F"
 SERVICE_ID = "18159994"
 
+# --- 2. HELPER FUNCTIONS ---
 def get_api_headers():
     return {"Authorization": f"Bearer {API_TOKEN}"}
 
@@ -25,80 +26,100 @@ def fetch_live_log_via_api(file_path):
         st.error(f"API Error: {e}")
     return None
 
+def list_files(directory):
+    """Helper to list all files in a directory to find the right path."""
+    list_url = f"https://api.nitrado.net/services/{SERVICE_ID}/gameservers/file_server/list?dir={directory}"
+    res = requests.get(list_url, headers=get_api_headers())
+    if res.status_code == 200:
+        return res.json().get('data', {}).get('entries', [])
+    return []
+
 def filter_live_activity(file_content, mode):
-    """Parses logs for Movement, Building, Combat, and Vehicles."""
+    """Parses logs for specific game events."""
     data = []
     content = file_content.decode('latin-1', errors='ignore')
     
-    # Combined search patterns for ADM and RPT events
+    # Regex patterns for tracking
     patterns = {
-        "Movement/Position": r"pos=<([\d\.]+, [\d\.]+, [\d\.]+)>",
-        "Building/Placing": r"(built|placed|Placement|ITEM_PLACED|BASEBUILDING)",
-        "Dismantling/Crafting": r"(dismantled|dismantling|mounting|unmounting|ITEM_DETACH)",
-        "Combat/Deaths": r"(hit by|killed by|died|unconscious|PLAYER_DAMAGE|PLAYER_LETHAL_DAMAGE)",
-        "Vehicles": r"(Transport|Vehicle|Car|Truck|PLAYER_VEHICLE)"
+        "Movement": r"pos=<([\d\.]+, [\d\.]+, [\d\.]+)>",
+        "Building": r"(built|placed|Placement|ITEM_PLACED|BASEBUILDING)",
+        "Dismantling": r"(dismantled|dismantling|mounting|unmounting)",
+        "Combat": r"(hit by|killed by|died|unconscious|PLAYER_DAMAGE)",
+        "Vehicles": r"(Transport|Vehicle|Car|Truck)"
     }
     
     for line in content.split('\n'):
         if any(re.search(p, line, re.IGNORECASE) for p in patterns.values()):
+            # Simple timestamp extraction
             timestamp = line[:8] if "|" not in line[:10] else "Live"
             data.append({"Timestamp": timestamp, "Event Details": line.strip()})
             
     return pd.DataFrame(data)
 
-# --- 2. MAIN APP INTERFACE ---
+# --- 3. MAIN APP INTERFACE ---
 st.set_page_config(page_title="Cyber DayZ Sherlock", layout="wide")
 
-# Sidebar Structure
+# SIDEBAR
 with st.sidebar:
     st.title("🛡️ Nitrado Manager")
+    st.info("Status: FTP & API Ready")
     
-    # Section A: Your existing FTP Manager logic would be here
-    st.info("Traditional FTP Scanner Ready")
-    
-    # Section B: THE NEW LIVE API SCANNER FEATURE
+    # --- LIVE API SCANNER SECTION ---
     st.divider()
     st.header("⚡ Live API Scanner")
-    st.caption("Access data instantly without waiting for 3hr restarts.")
     
-    live_mode = st.radio("Intelligence Type:", ["ADM (Base/Movement)", "RPT (Combat/System)"], horizontal=True)
+    live_mode = st.radio("Target Log:", ["ADM (Events)", "RPT (System)"], horizontal=True)
+    
+    # Allow user to manually fix the path if default fails
+    custom_path = st.text_input("Log Path:", value="/dayzps/config")
     
     if st.button("🔥 Request Last Hour Data", use_container_width=True):
-        with st.spinner("Fetching live buffer from Nitrado..."):
+        with st.spinner("Talking to Nitrado API..."):
             ext = ".adm" if "ADM" in live_mode else ".rpt"
             
-            # List files in /config to find the absolute newest
-            list_url = f"https://api.nitrado.net/services/{SERVICE_ID}/gameservers/file_server/list?dir=/dayzps/config"
-            list_res = requests.get(list_url, headers=get_api_headers())
+            # 1. Try to list files in the chosen path
+            files = list_files(custom_path)
             
-            if list_res.status_code == 200:
-                files = list_res.json().get('data', {}).get('entries', [])
-                # Case-insensitive check for .ADM and .RPT
-                target_files = [f for f in files if f['name'].lower().endswith(ext)]
+            # 2. Filter for specific extension (Case Insensitive)
+            target_files = [f for f in files if f['name'].lower().endswith(ext)]
+            
+            if target_files:
+                # Find the newest file
+                latest = max(target_files, key=lambda x: x['mtime'])
+                st.write(f"📂 **Analyzing:** `{latest['name']}`")
                 
-                if target_files:
-                    latest = max(target_files, key=lambda x: x['mtime'])
-                    st.write(f"📂 Analyzing: {latest['name']}")
-                    
-                    raw_log = fetch_live_log_via_api(latest['path'])
-                    if raw_log:
-                        results_df = filter_live_activity(raw_log, live_mode)
-                        st.session_state['live_intel'] = results_df
-                        st.success("Analysis Updated!")
-                else:
-                    st.error(f"No {ext.upper()} logs found in /dayzps/config. Verify your log path.")
+                # 3. Download and Process
+                raw_log = fetch_live_log_via_api(latest['path'])
+                if raw_log:
+                    results_df = filter_live_activity(raw_log, live_mode)
+                    st.session_state['live_intel'] = results_df
+                    st.success("Data Updated!")
             else:
-                st.error(f"Nitrado API rejected request (Code: {list_res.status_code})")
+                st.error(f"No {ext.upper()} files found in `{custom_path}`")
+                st.warning("Tip: Use the 'Path Finder' below to see what folders exist.")
 
-# --- 3. MAIN DASHBOARD DISPLAY ---
-st.title("Cyber DayZ - Live Intelligence Dashboard")
+    # --- DEBUG: PATH FINDER TOOL ---
+    with st.expander("🕵️ Debug: Path Finder"):
+        st.caption("If you can't find logs, check what folders the API sees.")
+        test_path = st.text_input("Check Directory:", value="/dayzps")
+        if st.button("List Files"):
+            found = list_files(test_path)
+            if found:
+                st.write(f"Found {len(found)} items in `{test_path}`:")
+                for f in found:
+                    icon = "Qw" if f['type'] == 'dir' else "Aq" 
+                    st.text(f"- {f['name']} ({f['type']})")
+            else:
+                st.error("Directory not found or empty.")
+
+# MAIN DASHBOARD
+st.title("Cyber DayZ - Live Intelligence")
 
 if 'live_intel' in st.session_state:
-    st.subheader("Latest Recorded Activity")
+    st.subheader("Latest Recorded Activity (Live Buffer)")
     st.dataframe(st.session_state['live_intel'], use_container_width=True)
     
-    # Download Button
     csv = st.session_state['live_intel'].to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Export Live Intel", csv, "live_dayz_intel.csv", "text/csv")
+    st.download_button("📥 Export Report", csv, "live_intel.csv", "text/csv")
 else:
-    st.write("👈 Select **Live API Scanner** in the sidebar to begin real-time tracking.")
+    st.write("👈 Use the **Live API Scanner** to fetch data.")
