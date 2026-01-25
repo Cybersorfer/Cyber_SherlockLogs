@@ -10,54 +10,57 @@ def get_api_headers():
 
 def try_download(path_guess):
     """Attempts to download a specific file without listing directory first."""
-    url = f"https://api.nitrado.net/services/{SERVICE_ID}/gameservers/file_server/download?file={path_guess}"
+    # Ensure no leading slash for relative path
+    clean_path = path_guess.lstrip("/")
+    
+    url = f"https://api.nitrado.net/services/{SERVICE_ID}/gameservers/file_server/download?file={clean_path}"
     try:
         res = requests.get(url, headers=get_api_headers())
+        
+        # DEBUG: Print status to help troubleshoot
+        st.write(f"Testing `{clean_path}` -> Status: {res.status_code}")
+        
         if res.status_code == 200:
             return True, res.json()['data']['token']['url']
         return False, None
-    except:
+    except Exception as e:
+        st.error(f"Error: {e}")
         return False, None
 
 st.set_page_config(page_title="DayZ Anchor Test")
-st.title("⚓ Path Triangulation")
-st.write("We are testing 3 theories to find where your files live.")
+st.title("⚓ Path Triangulation (Blind Grab)")
+st.info("Since 'List Files' is blocked, we will try to grab known files directly.")
 
 if st.button("🚀 Run Connection Test"):
     
-    # THEORY 1: Root is inside 'dayzps' folder
-    # We look for the config file directly
-    path1 = "serverDZ_Private.cfg" 
+    st.subheader("Testing Theory 1: API is at Server Root")
+    # Path taken directly from your RPT logs
+    path1 = "dayzps/config/Users/Survivor/Server.core.xml"
     found1, url1 = try_download(path1)
     
-    # THEORY 2: Root is the User folder
-    # We look for 'dayzps/config file'
-    path2 = "dayzps/serverDZ_Private.cfg"
+    if found1:
+        st.success("✅ **SUCCESS!** We downloaded `Server.core.xml`")
+        st.markdown(f"**CONCLUSION:** Your correct log path is: `dayzps/config`")
+        st.markdown("**Next Step:** We will build the scanner to blindly grab `.ADM` files from this path.")
+        st.stop()
+    
+    st.subheader("Testing Theory 2: API is already inside 'dayzps'")
+    # Try the same file, but assuming we are already in the dayzps folder
+    path2 = "config/Users/Survivor/Server.core.xml"
     found2, url2 = try_download(path2)
     
-    # THEORY 3: Logs are in the Profiles folder (Common for Console)
-    # We try to grab a generic profile file
-    path3 = "dayzps/config/Users/Survivor/Server.core.xml"
-    found3, url3 = try_download(path3)
+    if found2:
+        st.success("✅ **SUCCESS!** We downloaded `Server.core.xml`")
+        st.markdown(f"**CONCLUSION:** Your correct log path is: `config`")
+        st.stop()
 
-    st.divider()
+    st.error("❌ Both attempts failed.")
+    st.warning("""
+    **Diagnosis:** Your Nitrado Token likely has 'Gameserver' permissions but is missing **'File Server'** permissions.
     
-    if found1:
-        st.success(f"✅ **THEORY 1 PASSED!**")
-        st.write("Your API Root is ALREADY inside the `dayzps` folder.")
-        st.info("**CORRECT PATH TO USE:** `config` (NOT `dayzps/config`)")
-        
-    elif found2:
-        st.success(f"✅ **THEORY 2 PASSED!**")
-        st.write("Your API Root is the server base.")
-        st.info("**CORRECT PATH TO USE:** `dayzps/config`")
-        
-    elif found3:
-        st.success(f"✅ **THEORY 3 PASSED!**")
-        st.write("Found deeply nested config.")
-        st.info("**CORRECT PATH TO USE:** `dayzps/config`")
-        
-    else:
-        st.error("❌ All download attempts failed.")
-        st.write("This likely means the 'File Server' feature is disabled for your Token.")
-        st.caption("Double check that your Nitrado Token has 'Files > Download' permissions checked.")
+    **Fix:**
+    1. Go to Nitrado > Developer Portal.
+    2. Create a NEW Token.
+    3. CHECK the box that says **"Files" (Download/List/Upload)**.
+    4. Replace the token in this script.
+    """)
