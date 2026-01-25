@@ -3,18 +3,16 @@ import pandas as pd
 import ftplib
 import io
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# --- 1. CREDENTIALS (FROM YOUR ORIGINAL SCRIPT) ---
+# --- 1. CREDENTIALS ---
 FTP_HOST = "usla643.gamedata.io"
 FTP_USER = "ni11109181_1"
 FTP_PASS = "343mhfxd"
-# We confirmed this path via your logs earlier
 FTP_PATH = "/dayzps/config"
 
 # --- 2. CORE FUNCTIONS ---
 def connect_ftp():
-    """Establishes connection to Nitrado FTP."""
     try:
         ftp = ftplib.FTP(FTP_HOST)
         ftp.login(FTP_USER, FTP_PASS)
@@ -23,127 +21,118 @@ def connect_ftp():
         st.error(f"FTP Connection Failed: {e}")
         return None
 
-def get_latest_log(ftp, file_extension=".ADM"):
-    """Finds the most recent log file in the config folder."""
+def get_recent_files(ftp):
+    """Finds the most recently modified ADM and RPT files."""
     try:
         ftp.cwd(FTP_PATH)
         files = []
         
-        # Get list of files with details to sort by date
-        # Note: FTP listing can be tricky, we'll try a simple nlst and sort by name first
-        # since DayZ logs usually contain timestamps in the name.
+        # Get detailed list to check modification times (if server supports it)
+        # Fallback: Sort by name since DayZ logs include timestamps in filenames
+        # Format: DayZServer_PS4_x64_2026_01_21_15_23_02.ADM
         filenames = ftp.nlst()
         
-        # Filter for ADM logs
-        targets = [f for f in filenames if f.lower().endswith(file_extension.lower())]
+        adm_files = [f for f in filenames if f.lower().endswith(".adm")]
+        rpt_files = [f for f in filenames if f.lower().endswith(".rpt")]
         
-        if not targets:
-            return None
-            
-        # Sort files (assuming standard naming allows sort by name, otherwise we'd need MDTM)
-        targets.sort()
-        latest_file = targets[-1] # The last one is usually the newest
-        return latest_file
+        adm_files.sort()
+        rpt_files.sort()
+        
+        return {
+            "ADM": adm_files[-1] if adm_files else None,
+            "RPT": rpt_files[-1] if rpt_files else None
+        }
     except Exception as e:
-        st.error(f"Error finding logs: {e}")
-        return None
+        st.error(f"Error listing files: {e}")
+        return {"ADM": None, "RPT": None}
 
-def download_log_content(ftp, filename):
-    """Downloads the specific file into memory."""
+def download_file(ftp, filename):
     try:
-        # Buffer to hold file in RAM
         r_buffer = io.BytesIO()
         ftp.retrbinary(f"RETR {filename}", r_buffer.write)
         r_buffer.seek(0)
         return r_buffer.read()
-    except Exception as e:
-        st.error(f"Download Error: {e}")
+    except:
         return None
 
-def parse_activity(content):
-    """Parses the log for Player and Base activity."""
+def parse_hybrid_data(adm_content, rpt_content):
+    """Combines movement data (ADM) with live connection data (RPT)."""
     data = []
-    # Decode latin-1 to handle special characters
-    decoded = content.decode('latin-1', errors='ignore')
     
-    # Regex for coordinates (X, Z)
-    pos_pattern = re.compile(r"pos=<(\d+\.\d+),\s*\d+\.\d+,\s*(\d+\.\d+)>")
-    
-    for line in decoded.split('\n'):
-        # Keywords we care about
-        if any(k in line for k in ["placed", "built", "dismantled", "Transport", "killed", "died", "hit by"]):
-            timestamp = line[:8] if "|" not in line[:10] else "Live"
-            
-            # Extract Coordinates
-            coords = "N/A"
-            match = pos_pattern.search(line)
-            if match:
-                coords = f"{match.group(1)}, {match.group(2)}"
-            
-            # Categorize
-            category = "General"
-            if "Transport" in line: category = "🚗 Vehicle"
-            elif "placed" in line or "built" in line: category = "🔨 Base Building"
-            elif "killed" in line or "hit by" in line: category = "💀 PvP/Death"
-            
-            data.append({
-                "Time": timestamp,
-                "Category": category,
-                "Coords": coords,
-                "Event": line.strip()
-            })
-            
-    return pd.DataFrame(data)
+    # 1. Parse ADM (Positions/Building) - Often Stale
+    if adm_content:
+        decoded_adm = adm_content.decode('latin-1', errors='ignore')
+        pos_pattern = re.compile(r"pos=<(\d+\.\d+),\s*\d+\.\d+,\s*(\d+\.\d+)>")
+        
+        for line in decoded_adm.split('\n'):
+            if any(k in line for k in ["placed", "built", "dismantled", "killed", "died", "Transport"]):
+                ts = line[:8] if "|" not in line[:10] else "Live"
+                coords = "N/A"
+                match = pos_pattern.search(line)
+                if match: coords = f"{match.group(1)}, {match.group(2)}"
+                
+                cat = "🏗️ Base/Move"
+                if "killed" in line or "died" in line: cat = "💀 Death"
+                
+                data.append({"Source": "ADM (Map)", "Time": ts, "Type": cat, "Info": line.strip()[:100], "Coords": coords})
+
+    # 2. Parse RPT (Connections/System) - Often Fresher
+    if rpt_content:
+        decoded_rpt = rpt_content.decode('latin-1', errors='ignore')
+        for line in decoded_rpt.split('\n'):
+            # Filter for Login, Logout, Kick
+            if any(k in line for k in ["Player", "connected", "disconnected", "kicked", "Login"]):
+                # Clean up timestamp from RPT format usually "17:46:16.728"
+                ts = line.split(" ")[0] if len(line) > 8 else "Unknown"
+                
+                if "connected" in line:
+                    data.append({"Source": "RPT (Sys)", "Time": ts, "Type": "🟢 Connect", "Info": line.strip(), "Coords": "N/A"})
+                elif "disconnected" in line or "kicked" in line:
+                    data.append({"Source": "RPT (Sys)", "Time": ts, "Type": "🔴 Disconnect", "Info": line.strip(), "Coords": "N/A"})
+
+    # Sort all events by Time (Text sort isn't perfect but works for HH:MM:SS)
+    df = pd.DataFrame(data)
+    if not df.empty:
+        df = df.sort_values(by="Time", ascending=False)
+        
+    return df
 
 # --- 3. APP UI ---
-st.set_page_config(page_title="DayZ FTP Live Scanner", layout="wide")
+st.set_page_config(page_title="DayZ Live Hybrid Scanner", layout="wide")
 
-with st.sidebar:
-    st.title("📡 FTP Live Scanner")
-    st.info(f"Host: {FTP_HOST}\nPath: {FTP_PATH}")
-    
-    scan_mode = st.radio("Scan Target:", [".ADM (Activity)", ".RPT (System)"])
-    ext = ".ADM" if "ADM" in scan_mode else ".RPT"
-    
-    if st.button("🔥 SCAN NOW", use_container_width=True):
-        with st.spinner("Connecting to FTP..."):
-            ftp = connect_ftp()
-            if ftp:
-                st.session_state.ftp_status = "Connected"
+st.title("📡 DayZ Live Monitor (Hybrid ADM/RPT)")
+st.info("Because DayZ buffers map data (ADM) until restart, we also scan system logs (RPT) to see who is online right now.")
+
+if st.button("🔥 SCAN FOR LATEST ACTIVITY", use_container_width=True):
+    with st.spinner("Connecting to Server..."):
+        ftp = connect_ftp()
+        if ftp:
+            # 1. Identify Files
+            targets = get_recent_files(ftp)
+            st.write(f"**Targeting Files:**")
+            col1, col2 = st.columns(2)
+            col1.success(f"🗺️ Map Log: `{targets['ADM']}`")
+            col2.warning(f"⚙️ System Log: `{targets['RPT']}`")
+            
+            # 2. Download Content
+            adm_data = download_file(ftp, targets['ADM']) if targets['ADM'] else None
+            rpt_data = download_file(ftp, targets['RPT']) if targets['RPT'] else None
+            
+            ftp.quit()
+            
+            # 3. Parse & Merge
+            if adm_data or rpt_data:
+                df = parse_hybrid_data(adm_data, rpt_data)
                 
-                # Find Latest
-                target_file = get_latest_log(ftp, ext)
-                if target_file:
-                    st.success(f"Found: {target_file}")
+                if not df.empty:
+                    # Filter for activity "Near the end" (simple approach)
+                    st.subheader("Combined Timeline (Newest First)")
+                    st.dataframe(df, use_container_width=True)
                     
-                    # Download
-                    content = download_log_content(ftp, target_file)
-                    if content:
-                        # Parse
-                        df = parse_activity(content)
-                        st.session_state.ftp_data = df
-                        st.session_state.current_file = target_file
-                    
+                    # CSV Export
+                    csv = df.to_csv(index=False).encode('utf-8')
+                    st.download_button("📥 Download Combined Report", csv, "hybrid_report.csv", "text/csv")
                 else:
-                    st.warning(f"No {ext} files found in {FTP_PATH}")
-                
-                ftp.quit()
-
-# --- MAIN DISPLAY ---
-st.title("Cyber DayZ - Live Intelligence (FTP Mode)")
-
-if 'ftp_data' in st.session_state:
-    df = st.session_state.ftp_data
-    
-    col1, col2 = st.columns(2)
-    col1.metric("Events Detected", len(df))
-    col2.metric("Source Log", st.session_state.current_file)
-    
-    st.dataframe(df, use_container_width=True)
-    
-    # Export
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Download Report", csv, "ftp_live_report.csv", "text/csv")
-
-else:
-    st.write("👈 Click **SCAN NOW** to pull live data directly via FTP.")
+                    st.warning("Files downloaded, but no relevant events found.")
+            else:
+                st.error("Failed to download logs.")
