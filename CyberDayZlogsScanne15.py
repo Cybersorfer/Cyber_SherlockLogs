@@ -1,176 +1,63 @@
 import streamlit as st
-import pandas as pd
 import requests
-import re
 
-# --- 1. CONFIGURATION ---
+# --- CONFIGURATION ---
 API_TOKEN = "CWBuIFx8j-KkbXDO0r6WGiBAtP_KSUiz11iQFxuB4jkU6r0wm9E9G1rcr23GuSfI8k6ldPOWseNuieSUnuV6UXPSSGzMWxzat73F"
 SERVICE_ID = "18159994"
 
-# --- 2. CORE FUNCTIONS ---
 def get_api_headers():
     return {"Authorization": f"Bearer {API_TOKEN}"}
 
-def probe_folder(path):
-    """Tries to list a folder and returns (Success_Bool, File_Count, Content_List)."""
-    # Fix: Ensure no leading slash to avoid 500 Errors
-    clean_path = path.lstrip("/")
-    url = f"https://api.nitrado.net/services/{SERVICE_ID}/gameservers/file_server/list?dir={clean_path}"
-    
+def try_download(path_guess):
+    """Attempts to download a specific file without listing directory first."""
+    url = f"https://api.nitrado.net/services/{SERVICE_ID}/gameservers/file_server/download?file={path_guess}"
     try:
         res = requests.get(url, headers=get_api_headers())
         if res.status_code == 200:
-            entries = res.json().get('data', {}).get('entries', [])
-            return True, len(entries), entries
-        return False, 0, []
+            return True, res.json()['data']['token']['url']
+        return False, None
     except:
-        return False, 0, []
+        return False, None
 
-def download_log(file_path):
-    """Downloads file content using relative path."""
-    clean_path = file_path.lstrip("/")
-    url = f"https://api.nitrado.net/services/{SERVICE_ID}/gameservers/file_server/download?file={clean_path}"
-    try:
-        res = requests.get(url, headers=get_api_headers())
-        if res.status_code == 200:
-            token_url = res.json()['data']['token']['url']
-            return requests.get(token_url).content
-    except:
-        return None
+st.set_page_config(page_title="DayZ Anchor Test")
+st.title("⚓ Path Triangulation")
+st.write("We are testing 3 theories to find where your files live.")
 
-def parse_adm_data(content):
-    """Parses .ADM content for player/building activity."""
-    data = []
-    decoded = content.decode('latin-1', errors='ignore')
+if st.button("🚀 Run Connection Test"):
     
-    # Pattern to find coordinates
-    pos_pattern = re.compile(r"pos=<(\d+\.\d+),\s*\d+\.\d+,\s*(\d+\.\d+)>")
+    # THEORY 1: Root is inside 'dayzps' folder
+    # We look for the config file directly
+    path1 = "serverDZ_Private.cfg" 
+    found1, url1 = try_download(path1)
     
-    for line in decoded.split('\n'):
-        # We only care about lines with coordinates OR key events
-        if "pos=<" in line or any(k in line for k in ["placed", "built", "dismantled", "killed", "died"]):
-            timestamp = line[:8] if "|" not in line[:10] else "Live"
-            
-            # Extract clean coords
-            coords = "N/A"
-            match = pos_pattern.search(line)
-            if match:
-                coords = f"{match.group(1)}, {match.group(2)}"
-            
-            data.append({
-                "Time": timestamp, 
-                "Coords": coords,
-                "Event": line.strip()[:150] # Trim long lines
-            })
-    return pd.DataFrame(data)
-
-# --- 3. APP UI ---
-st.set_page_config(page_title="DayZ Path Finder", layout="wide")
-
-st.title("🕵️ DayZ Path Finder")
-st.markdown("This tool automatically tests common paths to find where your files are hidden.")
-
-# --- AUTOMATIC PROBE SECTION ---
-if 'valid_path' not in st.session_state:
-    st.session_state.valid_path = None
-
-with st.expander("🔍 Connection Diagnostics (Click to view)", expanded=True):
-    col1, col2 = st.columns(2)
+    # THEORY 2: Root is the User folder
+    # We look for 'dayzps/config file'
+    path2 = "dayzps/serverDZ_Private.cfg"
+    found2, url2 = try_download(path2)
     
-    # Test paths likely to work based on your logs
-    candidates = [
-        "",              # Try Empty String (Relative Root)
-        ".",             # Try Dot (Current Dir)
-        "config",        # Try config directly (If already in dayzps)
-        "dayzps",        # Try dayzps (If at server root)
-        "dayzps/config", # The path from the log file
-        "mpmissions"     # The mission folder from the log file
-    ]
+    # THEORY 3: Logs are in the Profiles folder (Common for Console)
+    # We try to grab a generic profile file
+    path3 = "dayzps/config/Users/Survivor/Server.core.xml"
+    found3, url3 = try_download(path3)
+
+    st.divider()
     
-    found_any = False
-    
-    for path in candidates:
-        success, count, items = probe_folder(path)
-        label = "ROOT (Empty)" if path == "" else path
+    if found1:
+        st.success(f"✅ **THEORY 1 PASSED!**")
+        st.write("Your API Root is ALREADY inside the `dayzps` folder.")
+        st.info("**CORRECT PATH TO USE:** `config` (NOT `dayzps/config`)")
         
-        if success:
-            st.success(f"✅ **FOUND:** `{label}` contains {count} files/folders!")
-            # Save the first working path that looks promising
-            if not st.session_state.valid_path and count > 0:
-                st.session_state.valid_path = path
-                st.session_state.file_list = items
-            found_any = True
-        else:
-            st.error(f"❌ **Failed:** `{label}` (Not accessible)")
-
-    if not found_any:
-        st.error("CRITICAL: Nitrado API rejected ALL paths. Check your Token permissions.")
-
-# --- FILE BROWSER ---
-st.divider()
-
-if st.session_state.valid_path is not None:
-    current_path = st.session_state.valid_path
-    files = st.session_state.file_list
-    
-    st.subheader(f"📂 Browsing: `{current_path if current_path else 'ROOT'}`")
-    
-    # 1. Show Folders (Navigation)
-    folders = [f for f in files if f['type'] == 'dir']
-    if folders:
-        st.markdown("**Subfolders:**")
-        cols = st.columns(4)
-        for i, folder in enumerate(folders):
-            if cols[i % 4].button(f"📁 {folder['name']}", key=folder['path']):
-                # Drill down
-                new_path = f"{current_path}/{folder['name']}".strip("/")
-                success, count, new_items = probe_folder(new_path)
-                if success:
-                    st.session_state.valid_path = new_path
-                    st.session_state.file_list = new_items
-                    st.rerun()
-
-    # 2. Show Files (Analysis)
-    st.markdown("---")
-    st.markdown("**Files:**")
-    
-    target_files = [f for f in files if f['type'] == 'file' and any(x in f['name'].lower() for x in ['.adm', '.rpt'])]
-    
-    if target_files:
-        # Sort by newest
-        target_files.sort(key=lambda x: x['mtime'], reverse=True)
+    elif found2:
+        st.success(f"✅ **THEORY 2 PASSED!**")
+        st.write("Your API Root is the server base.")
+        st.info("**CORRECT PATH TO USE:** `dayzps/config`")
         
-        file_map = {f"{f['name']} ({f['size']}b)": f['path'] for f in target_files}
-        selection = st.selectbox("Select Log File:", list(file_map.keys()))
+    elif found3:
+        st.success(f"✅ **THEORY 3 PASSED!**")
+        st.write("Found deeply nested config.")
+        st.info("**CORRECT PATH TO USE:** `dayzps/config`")
         
-        if st.button("🔥 ANALYZE THIS FILE"):
-            selected_path = file_map[selection]
-            st.info(f"Downloading `{selected_path}`...")
-            
-            raw_content = download_log(selected_path)
-            if raw_content:
-                if ".adm" in selection.lower():
-                    df = parse_adm_data(raw_content)
-                    st.success(f"Success! Extracted {len(df)} events.")
-                    st.dataframe(df, use_container_width=True)
-                else:
-                    st.warning("This is a System Log (.RPT), not an Admin Log. It mostly contains server errors.")
-                    st.text(raw_content.decode('latin-1')[:1000])
-            else:
-                st.error("Download failed.")
     else:
-        st.info("No .ADM or .RPT logs found in this specific folder. Try opening a subfolder above.")
-        
-        # Fallback: List ALL files if no logs found
-        all_files = [f['name'] for f in files if f['type'] == 'file']
-        if all_files:
-            st.caption(f"Other files here: {', '.join(all_files)}")
-
-    # 3. Go Back Button
-    st.markdown("---")
-    if st.button("⬅️ Reset to Start"):
-        st.session_state.valid_path = None
-        st.rerun()
-
-else:
-    st.warning("Waiting for successful connection probe...")
+        st.error("❌ All download attempts failed.")
+        st.write("This likely means the 'File Server' feature is disabled for your Token.")
+        st.caption("Double check that your Nitrado Token has 'Files > Download' permissions checked.")
