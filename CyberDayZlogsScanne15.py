@@ -22,6 +22,11 @@ team_accounts = {
     "CAPTTipsyPants": "cap004"
 }
 
+# --- GLOBAL CREDENTIALS (USED FOR LOGS AND XML) ---
+FTP_HOST = "usla643.gamedata.io"
+FTP_USER = "ni11109181_1"
+FTP_PASS = "343mhfxd"
+
 def log_session(user, action):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # Safe retrieval of headers for Streamlit Cloud
@@ -53,52 +58,46 @@ def check_password():
     return False
 
 # ==============================================================================
-# SECTION 2: NEW LOOT ANALYZER FUNCTIONS
+# SECTION 2: LOOT ANALYZER (FTP VERSION)
 # ==============================================================================
-def get_dynamic_file_path(api_key, server_id):
-    """Automatically finds the correct folder name (e.g., ni1234567_1)"""
-    list_url = f"https://api.nitrado.net/services/{server_id}/gameservers/file_server/list?path=/games/"
-    headers = {'Authorization': f'Bearer {api_key}'}
-    try:
-        response = requests.get(list_url, headers=headers)
-        if response.status_code == 200:
-            entries = response.json().get('data', {}).get('entries', [])
-            for entry in entries:
-                if entry['name'].startswith("ni") and entry['type'] == "directory":
-                    # NOTE: If using Livonia, change 'dayz_auto.chernarusplus' to 'dayz_auto.enoch' below
-                    return f"/games/{entry['name']}/no_ip_1/mpmissions/dayz_auto.chernarusplus/db/types.xml"
-    except Exception:
-        pass
-    return None
-
-def run_loot_analyzer(api_key, server_id):
+def run_loot_analyzer():
     st.header("🎯 Loot Economy & Rarity Tracker")
 
-    if not api_key or not server_id:
-        st.warning("⚠️ Please enter your Nitrado API Key and Server ID in the sidebar to use this tool.")
-        return
-
-    # Step 1: Automatically find the path
-    with st.spinner("Locating types.xml on server..."):
-        file_path = get_dynamic_file_path(api_key, server_id)
+    # 1. Connect via FTP using the saved credentials
+    xml_content = None
+    loaded_path = ""
     
-    if not file_path:
-        st.error("❌ Could not automatically find your server folder. Check API Key/Server ID or ensure server is running.")
-        return
+    # List of probable paths for types.xml on Nitrado Console Servers
+    possible_paths = [
+        "/dayzps/mpmissions/dayz_auto.chernarusplus/db/types.xml", # Standard Chernarus
+        "/dayzps/mpmissions/dayz_auto.enoch/db/types.xml",         # Livonia
+        "/mpmissions/dayz_auto.chernarusplus/db/types.xml"         # Alt config
+    ]
 
-    # Step 2: Request the download URL
-    url = f"https://api.nitrado.net/services/{server_id}/gameservers/file_server/download?file={file_path}"
-    headers = {'Authorization': f'Bearer {api_key}'}
-    
-    try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            download_url = response.json().get('data', {}).get('url')
+    with st.spinner(f"🔌 Connecting to FTP ({FTP_HOST})..."):
+        try:
+            ftp = FTP(FTP_HOST, timeout=30)
+            ftp.login(user=FTP_USER, passwd=FTP_PASS)
             
-            # Step 3: Download and Parse XML
-            xml_response = requests.get(download_url)
-            xml_content = xml_response.text
+            # Try to download the file from the possible paths
+            for path in possible_paths:
+                try:
+                    buf = io.BytesIO()
+                    ftp.retrbinary(f"RETR {path}", buf.write)
+                    xml_content = buf.getvalue().decode("utf-8", errors="ignore")
+                    loaded_path = path
+                    break # Found it, stop searching
+                except Exception:
+                    continue # Try next path
             
+            ftp.quit()
+        except Exception as e:
+            st.error(f"FTP Connection Failed: {e}")
+            return
+
+    # 2. Parse Data if file was found
+    if xml_content:
+        try:
             root = ET.fromstring(xml_content)
             data = []
             
@@ -132,6 +131,7 @@ def run_loot_analyzer(api_key, server_id):
             df = pd.DataFrame(data)
 
             # --- Controls ---
+            st.success(f"✅ Loaded {len(df)} items from `{loaded_path}`")
             col1, col2 = st.columns([3, 1])
             with col1:
                 search = st.text_input("🔍 Search Item", placeholder="Type item name...")
@@ -159,13 +159,11 @@ def run_loot_analyzer(api_key, server_id):
                     "Min": st.column_config.NumberColumn("Min (Backup)"),
                 }
             )
-            st.success(f"loaded {len(df)} items from {file_path}")
 
-        else:
-            st.error(f"⚠️ Failed to download file. Nitrado API Message: {response.text}")
-            
-    except Exception as e:
-        st.error(f"Connection Error: {e}")
+        except Exception as e:
+            st.error(f"Error parsing XML file: {e}")
+    else:
+        st.error("❌ Could not find 'types.xml'. Please check if your server mission folder matches standard Nitrado paths.")
 
 # ==============================================================================
 # MAIN APPLICATION BLOCK
@@ -182,10 +180,6 @@ if check_password():
     if 'raw_download' not in st.session_state: st.session_state.raw_download = ""
     if 'current_mode' not in st.session_state: st.session_state.current_mode = "Filter"
     
-    # Store API Keys in Session State
-    if 'api_key' not in st.session_state: st.session_state.api_key = ""
-    if 'server_id' not in st.session_state: st.session_state.server_id = ""
-
     st.markdown("""
         <style>
         .stApp { background-color: #0d1117; color: #8b949e !important; }
@@ -208,8 +202,7 @@ if check_password():
     # MODE 1: LOG SCANNER (Your Original App)
     # ==============================================================================
     if app_mode == "Log Scanner":
-        FTP_HOST, FTP_USER, FTP_PASS = "usla643.gamedata.io", "ni11109181_1", "343mhfxd"
-
+        
         def get_ftp_connection():
             try:
                 ftp = FTP(FTP_HOST, timeout=20)
@@ -411,12 +404,4 @@ if check_password():
     # MODE 2: LOOT ECONOMY (New Feature)
     # ==============================================================================
     elif app_mode == "Loot Economy":
-        # API Credential Inputs for this specific tool
-        with st.sidebar:
-            st.divider()
-            st.subheader("🔑 Nitrado API Settings")
-            st.info("Required for Loot Tracker")
-            st.session_state.api_key = st.text_input("Nitrado API Token", value=st.session_state.api_key, type="password")
-            st.session_state.server_id = st.text_input("Server ID (e.g. 1234567)", value=st.session_state.server_id)
-
-        run_loot_analyzer(st.session_state.api_key, st.session_state.server_id)
+        run_loot_analyzer()
