@@ -59,6 +59,21 @@ def check_password():
 # ==============================================================================
 # SECTION 2: LOOT ANALYZER (FTP VERSION)
 # ==============================================================================
+def format_item_name(code_name):
+    """
+    Cleans up the raw code name to look more like an In-Game name.
+    Example: 'Mag_AKM_Drum75Rnd' -> 'AKM Drum 75Rnd Mag'
+    """
+    # Replace underscores with spaces
+    clean = code_name.replace("_", " ")
+    
+    # Optional: formatting tweaks to make it read better
+    # Move "Mag" to the end if it starts with it
+    if clean.startswith("Mag "):
+        clean = clean[4:] + " Mag"
+        
+    return clean
+
 def run_loot_analyzer():
     st.header("🎯 Loot Economy & Rarity Tracker")
 
@@ -66,9 +81,9 @@ def run_loot_analyzer():
     xml_content = None
     loaded_path = ""
     
-    # UPDATED PATH LIST BASED ON YOUR SCREENSHOT
+    # UPDATED PATH LIST BASED ON YOUR SERVER
     possible_paths = [
-        "/dayzps_missions/dayzOffline.chernarusplus/db/types.xml", # <--- YOUR SPECIFIC PATH
+        "/dayzps_missions/dayzOffline.chernarusplus/db/types.xml", 
         "/dayzps/mpmissions/dayzOffline.chernarusplus/db/types.xml",
         "/dayzps/mpmissions/dayz_auto.chernarusplus/db/types.xml",
         "/dayzps/mpmissions/dayz_auto.enoch/db/types.xml",
@@ -121,7 +136,8 @@ def run_loot_analyzer():
                     else: rarity = "🟢 Common"
                     
                     data.append({
-                        "Item Name": name,
+                        "Code Name": name,
+                        "Display Name": format_item_name(name), # New Clean Name
                         "Type": category,
                         "Nominal": nominal,
                         "Min": min_val,
@@ -135,29 +151,36 @@ def run_loot_analyzer():
             st.success(f"✅ Loaded {len(df)} items from `{loaded_path}`")
             col1, col2 = st.columns([3, 1])
             with col1:
-                search = st.text_input("🔍 Search Item", placeholder="Type item name...")
+                search = st.text_input("🔍 Search Item", placeholder="Type item name (e.g. AKM)")
             with col2:
-                sort_option = st.selectbox("Sort By", ["Item Name", "Nominal", "Rarity"])
+                sort_option = st.selectbox("Sort By", ["Display Name", "Nominal", "Rarity"])
 
             # Filter & Sort
             if search:
-                df = df[df['Item Name'].str.contains(search, case=False)]
+                # Search both code name and clean name
+                df = df[df['Display Name'].str.contains(search, case=False) | df['Code Name'].str.contains(search, case=False)]
             
             if sort_option == "Nominal":
                 df = df.sort_values(by="Nominal", ascending=True)
             elif sort_option == "Rarity":
                 df = df.sort_values(by="Nominal", ascending=True) 
             else:
-                df = df.sort_values(by="Item Name")
+                df = df.sort_values(by="Display Name")
 
             # Display
+            # HEIGHT INCREASED TO 900px to fit screen
             st.dataframe(
                 df, 
+                height=900, 
                 use_container_width=True, 
                 hide_index=True,
                 column_config={
-                    "Nominal": st.column_config.NumberColumn("Max (Nominal)"),
-                    "Min": st.column_config.NumberColumn("Min (Backup)"),
+                    "Code Name": st.column_config.TextColumn("Code Name", help="The raw ID used in XML", width="medium"),
+                    "Display Name": st.column_config.TextColumn("Item Name", width="large"),
+                    "Type": st.column_config.TextColumn("Category", width="small"),
+                    "Nominal": st.column_config.NumberColumn("Max", width="small"),
+                    "Min": st.column_config.NumberColumn("Min", width="small"),
+                    "Rarity": st.column_config.TextColumn("Rarity Tier", width="medium"),
                 }
             )
 
