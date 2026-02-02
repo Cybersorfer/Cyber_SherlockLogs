@@ -22,14 +22,13 @@ team_accounts = {
     "CAPTTipsyPants": "cap004"
 }
 
-# --- GLOBAL CREDENTIALS (USED FOR LOGS AND XML) ---
+# --- GLOBAL CREDENTIALS ---
 FTP_HOST = "usla643.gamedata.io"
 FTP_USER = "ni11109181_1"
 FTP_PASS = "343mhfxd"
 
 def log_session(user, action):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # Safe retrieval of headers for Streamlit Cloud
     headers = getattr(st.context, "headers", {})
     ip = headers.get("X-Forwarded-For", "Unknown/Local")
     entry = f"{now} | User: {user} | Action: {action} | IP: {ip}\n"
@@ -63,15 +62,17 @@ def check_password():
 def run_loot_analyzer():
     st.header("🎯 Loot Economy & Rarity Tracker")
 
-    # 1. Connect via FTP using the saved credentials
+    # 1. Connect via FTP
     xml_content = None
     loaded_path = ""
     
-    # List of probable paths for types.xml on Nitrado Console Servers
+    # UPDATED PATH LIST BASED ON YOUR SCREENSHOT
     possible_paths = [
-        "/dayzps/mpmissions/dayz_auto.chernarusplus/db/types.xml", # Standard Chernarus
-        "/dayzps/mpmissions/dayz_auto.enoch/db/types.xml",         # Livonia
-        "/mpmissions/dayz_auto.chernarusplus/db/types.xml"         # Alt config
+        "/dayzps_missions/dayzOffline.chernarusplus/db/types.xml", # <--- YOUR SPECIFIC PATH
+        "/dayzps/mpmissions/dayzOffline.chernarusplus/db/types.xml",
+        "/dayzps/mpmissions/dayz_auto.chernarusplus/db/types.xml",
+        "/dayzps/mpmissions/dayz_auto.enoch/db/types.xml",
+        "/mpmissions/dayz_auto.chernarusplus/db/types.xml"
     ]
 
     with st.spinner(f"🔌 Connecting to FTP ({FTP_HOST})..."):
@@ -79,14 +80,14 @@ def run_loot_analyzer():
             ftp = FTP(FTP_HOST, timeout=30)
             ftp.login(user=FTP_USER, passwd=FTP_PASS)
             
-            # Try to download the file from the possible paths
+            # Search for the file
             for path in possible_paths:
                 try:
                     buf = io.BytesIO()
                     ftp.retrbinary(f"RETR {path}", buf.write)
                     xml_content = buf.getvalue().decode("utf-8", errors="ignore")
                     loaded_path = path
-                    break # Found it, stop searching
+                    break # Found it!
                 except Exception:
                     continue # Try next path
             
@@ -95,7 +96,7 @@ def run_loot_analyzer():
             st.error(f"FTP Connection Failed: {e}")
             return
 
-    # 2. Parse Data if file was found
+    # 2. Parse Data
     if xml_content:
         try:
             root = ET.fromstring(xml_content)
@@ -104,7 +105,7 @@ def run_loot_analyzer():
             for item in root.findall('type'):
                 name = item.get('name', 'Unknown')
                 
-                # Filter: Weapons, Guns, Rifles, Pistols, and Mags
+                # Filter: Weapons and Mags
                 is_weapon = any(x in name for x in ["Weapon", "Rifle", "Pistol", "Shotgun", "Gun"])
                 is_mag = "Mag_" in name
                 
@@ -113,7 +114,7 @@ def run_loot_analyzer():
                     min_val = int(item.find('min').text) if item.find('min') is not None else 0
                     category = "Magazine" if is_mag else "Weapon"
                     
-                    # Rarity Calculation
+                    # Rarity Logic
                     if nominal <= 3: rarity = "💎 Ultra Rare"
                     elif nominal <= 10: rarity = "🔴 Hard"
                     elif nominal <= 25: rarity = "🟡 Medium"
@@ -163,7 +164,7 @@ def run_loot_analyzer():
         except Exception as e:
             st.error(f"Error parsing XML file: {e}")
     else:
-        st.error("❌ Could not find 'types.xml'. Please check if your server mission folder matches standard Nitrado paths.")
+        st.error(f"❌ Could not find 'types.xml'. Tried these paths: {possible_paths}")
 
 # ==============================================================================
 # MAIN APPLICATION BLOCK
@@ -173,7 +174,7 @@ if check_password():
         st.set_page_config(page_title="CyberDayZ Ultimate Scanner", layout="wide", initial_sidebar_state="expanded")
         st.session_state.page_configured = True
 
-    # Session State Initialization
+    # Session State
     if 'mv' not in st.session_state: st.session_state.mv = 0
     if 'all_logs' not in st.session_state: st.session_state.all_logs = []
     if 'track_data' not in st.session_state: st.session_state.track_data = {}
@@ -199,7 +200,7 @@ if check_password():
         st.divider()
 
     # ==============================================================================
-    # MODE 1: LOG SCANNER (Your Original App)
+    # MODE 1: LOG SCANNER
     # ==============================================================================
     if app_mode == "Log Scanner":
         
