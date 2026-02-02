@@ -296,11 +296,11 @@ def run_loot_analyzer():
             df = pd.DataFrame(data)
 
             # --- Controls ---
-            st.success(f"✅ Loaded {len(df)} items from `{loaded_path}`")
+            st.success(f"✅ Loaded {len(df)} items")
             
             col1, col2, col3 = st.columns([2, 1, 1])
             with col1:
-                search = st.text_input("🔍 Search Item", placeholder="e.g. AKM")
+                search = st.text_input("🔍 Search Item", placeholder="e.g. ka-m")
             with col2:
                 cat_filter = st.multiselect("Filter Category", ["Rifle/Weapon", "Pistol", "Magazine"], default=["Rifle/Weapon", "Pistol", "Magazine"])
             with col3:
