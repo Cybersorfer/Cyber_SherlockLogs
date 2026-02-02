@@ -27,6 +27,149 @@ FTP_HOST = "usla643.gamedata.io"
 FTP_USER = "ni11109181_1"
 FTP_PASS = "343mhfxd"
 
+# --- TRANSLATION DICTIONARY (FROM YOUR DATA) ---
+ITEM_TRANSLATIONS = {
+    # Magazines
+    "Mag_1911_7Rnd": "7rd 1911 Mag",
+    "Mag_AK101_30Rnd": "30rd KA-101 Mag",
+    "Mag_AK101_30Rnd_Green": "30rd KA-101 Mag (Green)",
+    "Mag_AK74_30Rnd": "30rd KA-74 Mag",
+    "Mag_AK74_45Rnd": "45rd KA-74 Mag",
+    "Mag_AKM_30Rnd": "30rd KA-M Mag",
+    "Mag_AKM_Drum75Rnd": "75rd KA-M Drum Mag",
+    "Mag_AKM_Palm30Rnd": "30rd KA-M Polymer Mag",
+    "Mag_Aug_30Rnd": "30rd Aur Mag",
+    "Mag_CMAG_10Rnd": "10rd C-Mag (M4)",
+    "Mag_CMAG_20Rnd": "20rd C-Mag (M4)",
+    "Mag_CMAG_30Rnd": "30rd C-Mag (M4)",
+    "Mag_CMAG_40Rnd": "40rd C-Mag (M4)",
+    "Mag_CMAG_Green": "30rd C-Mag (Green)",
+    "Mag_CZ527_5rnd": "5rd CR-527 Mag",
+    "Mag_CZ550_10Rnd": "10rd Internal Mag (CZ550)",
+    "Mag_CZ61_20Rnd": "20rd Skorpion Mag",
+    "Mag_CZ75_15Rnd": "15rd CR-75 Mag",
+    "Mag_Deagle_9rnd": "9rd Deagle Mag",
+    "Mag_FAL_20Rnd": "20rd LAR Mag",
+    "Mag_FAMAS_25Rnd": "25rd LE-MAS Mag",
+    "Mag_FNX45_15Rnd": "15rd FX-45 Mag",
+    "Mag_Glock_15Rnd": "15rd Mlock-91 Mag",
+    "Mag_IJ70_8Rnd": "8rd IJ-70 Mag",
+    "Mag_M14_10Rnd": "10rd DMR Mag",
+    "Mag_M14_20Rnd": "20rd DMR Mag",
+    "Mag_MKII_10Rnd": "10rd MK II Mag",
+    "Mag_MP5_15Rnd": "15rd SG5-K Mag",
+    "Mag_MP5_30Rnd": "30rd SG5-K Mag",
+    "Mag_P1_8Rnd": "8rd P1 Mag",
+    "Mag_PM73_15Rnd": "15rd PM73 Rak Mag",
+    "Mag_PM73_25Rnd": "25rd PM73 Rak Mag",
+    "Mag_PP19_64Rnd": "64rd Bizon Mag",
+    "Mag_Ruger1022_15Rnd": "15rd Sporter Mag",
+    "Mag_Ruger1022_30Rnd": "30rd Sporter Mag",
+    "Mag_SSG82_5rnd": "5rd SSG 82 Mag",
+    "Mag_STANAG_30Rnd": "30rd Standard Mag",
+    "Mag_STANAG_30Rnd_Coupled": "60rd Coupled Mag",
+    "Mag_STANAG_60Rnd": "60rd Standard Mag (M4)",
+    "Mag_SV98_10Rnd": "10rd VS-98 Mag",
+    "Mag_SVD_10Rnd": "10rd VSD Mag",
+    "Mag_Saiga_5Rnd": "5rd Vaiga Mag",
+    "Mag_Saiga_8Rnd": "8rd Vaiga Mag",
+    "Mag_Saiga_Drum20Rnd": "20rd Vaiga Drum Mag",
+    "Mag_Scout_5Rnd": "5rd Pioneer Mag",
+    "Mag_UMP_25Rnd": "25rd USG-45 Mag",
+    "Mag_VAL_20Rnd": "20rd SVAL Mag",
+    "Mag_VSS_10Rnd": "10rd VSS Mag",
+    "Mag_Vikhr_30Rnd": "30rd Vikhr Mag",
+    
+    # Pistols
+    "CZ75": "CR-75",
+    "Colt1911": "Kolt 1911",
+    "Deagle": "Deagle",
+    "Deagle_Gold": "Deagle (Gold)",
+    "Derringer_Black": "Derringer (Black)",
+    "Derringer_Grey": "Derringer (Grey)",
+    "Derringer_Pink": "Derringer (Pink)",
+    "Engraved1911": "Kolt 1911 (Engraved)",
+    "FNX45": "FX-45",
+    "Flaregun": "Flaregun",
+    "Glock19": "Mlock-91",
+    "Longhorn": "Longhorn",
+    "MKII": "MK II",
+    "Magnum": "Revolver",
+    "MakarovIJ70": "IJ-70",
+    "P1": "P1",
+
+    # Rifles & Weapons
+    "AK101": "KA-101",
+    "AK101_Black": "KA-101 (Black)",
+    "AK101_Green": "KA-101 (Green)",
+    "AK74": "KA-74",
+    "AK74_Black": "KA-74 (Black)",
+    "AK74_Green": "KA-74 (Green)",
+    "AKM": "KA-M",
+    "AKS74U": "KAS-74U",
+    "AKS74U_Black": "KAS-74U (Black)",
+    "AKS74U_Green": "KAS-74U (Green)",
+    "ASVAL": "SVAL",
+    "Aug": "Aur A1",
+    "AugShort": "Aur AX",
+    "B95": "Blaze",
+    "CZ527": "CR-527",
+    "CZ527_Black": "CR-527 (Black)",
+    "CZ527_Camo": "CR-527 (Camo)",
+    "CZ527_Green": "CR-527 (Green)",
+    "CZ550": "CZ 550",
+    "CZ61": "Skorpion",
+    "Crossbow_Autumn": "Crossbow (Autumn)",
+    "Crossbow_Black": "Crossbow (Black)",
+    "Crossbow_Summer": "Crossbow (Summer)",
+    "Crossbow_Wood": "Crossbow (Wood)",
+    "FAL": "LAR",
+    "FAMAS": "LE-MAS",
+    "Izh18": "BK-18",
+    "Izh18Shotgun": "BK-133 (Single Shot)",
+    "Izh43Shotgun": "BK-43",
+    "M14": "DMR",
+    "M16A2": "M16-A2",
+    "M4A1": "M4-A1",
+    "M4A1_Black": "M4-A1 (Black)",
+    "M4A1_Green": "M4-A1 (Green)",
+    "M79": "M79 Grenade Launcher",
+    "MP5K": "SG5-K",
+    "Mosin9130": "Mosin 91/30",
+    "Mosin9130_Black": "Mosin 91/30 (Black)",
+    "Mosin9130_Camo": "Mosin 91/30 (Camo)",
+    "Mosin9130_Green": "Mosin 91/30 (Green)",
+    "Mp133Shotgun": "BK-133",
+    "PM73Rak": "PM-73 Rak",
+    "PP19": "Bizon",
+    "R12": "Sawed-off BK-43",
+    "Repeater": "Repeater Carbine",
+    "Ruger1022": "Sporter 22",
+    "SKS": "SK 59/66",
+    "SSG82": "SSG 82",
+    "SV98": "VS-98",
+    "SVD": "VSD",
+    "SVD_Wooden": "VSD (Wood)",
+    "Saiga": "Vaiga",
+    "SawedoffB95": "Sawed-off Blaze",
+    "SawedoffFAMAS": "Sawed-off LE-MAS",
+    "SawedoffIzh18": "Sawed-off BK-18",
+    "SawedoffIzh18Shotgun": "Sawed-off Izh 18 Shotgun",
+    "SawedoffIzh43Shotgun": "Sawed-off BK-43",
+    "SawedoffMagnum": "Sawed-off Revolver",
+    "SawedoffMosin9130": "Sawed-off Mosin",
+    "SawedoffMosin9130_Black": "Sawed-off Mosin (Black)",
+    "SawedoffMosin9130_Camo": "Sawed-off Mosin (Camo)",
+    "SawedoffMosin9130_Green": "Sawed-off Mosin (Green)",
+    "Scout": "Pioneer",
+    "Scout_Chernarus": "Pioneer (Chernarus)",
+    "Scout_Livonia": "Pioneer (Livonia)",
+    "UMP45": "USG-45",
+    "VSS": "VSS",
+    "Vikhr": "Vikhr",
+    "Winchester70": "M70 Tundra"
+}
+
 def log_session(user, action):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     headers = getattr(st.context, "headers", {})
@@ -59,20 +202,29 @@ def check_password():
 # ==============================================================================
 # SECTION 2: LOOT ANALYZER (FTP VERSION)
 # ==============================================================================
-def format_item_name(code_name):
+def get_friendly_name(code_name):
     """
-    Cleans up the raw code name to look more like an In-Game name.
-    Example: 'Mag_AKM_Drum75Rnd' -> 'AKM Drum 75Rnd Mag'
+    Returns the In-Game name if found in dictionary.
+    Otherwise, cleans up the code name.
     """
-    # Replace underscores with spaces
-    clean = code_name.replace("_", " ")
+    if code_name in ITEM_TRANSLATIONS:
+        return ITEM_TRANSLATIONS[code_name]
     
-    # Optional: formatting tweaks to make it read better
-    # Move "Mag" to the end if it starts with it
-    if clean.startswith("Mag "):
-        clean = clean[4:] + " Mag"
-        
+    # Fallback: Replace underscores and capitalization
+    clean = code_name.replace("_", " ")
     return clean
+
+def categorize_item(code_name):
+    """Assigns category based on the known list or string pattern"""
+    if "Mag_" in code_name: return "Magazine"
+    
+    # Check if it's in our pistols list (rough check using known pistol codes)
+    pistols_set = ["Colt1911", "CZ75", "Deagle", "FNX45", "Glock19", "Magnum", "MKII", "P1", "MakarovIJ70", "Longhorn", "Derringer"]
+    if any(p in code_name for p in pistols_set):
+        return "Pistol"
+    
+    # Default to Rifle/Weapon for others
+    return "Rifle/Weapon"
 
 def run_loot_analyzer():
     st.header("🎯 Loot Economy & Rarity Tracker")
@@ -81,7 +233,6 @@ def run_loot_analyzer():
     xml_content = None
     loaded_path = ""
     
-    # UPDATED PATH LIST BASED ON YOUR SERVER
     possible_paths = [
         "/dayzps_missions/dayzOffline.chernarusplus/db/types.xml", 
         "/dayzps/mpmissions/dayzOffline.chernarusplus/db/types.xml",
@@ -94,18 +245,14 @@ def run_loot_analyzer():
         try:
             ftp = FTP(FTP_HOST, timeout=30)
             ftp.login(user=FTP_USER, passwd=FTP_PASS)
-            
-            # Search for the file
             for path in possible_paths:
                 try:
                     buf = io.BytesIO()
                     ftp.retrbinary(f"RETR {path}", buf.write)
                     xml_content = buf.getvalue().decode("utf-8", errors="ignore")
                     loaded_path = path
-                    break # Found it!
-                except Exception:
-                    continue # Try next path
-            
+                    break 
+                except Exception: continue
             ftp.quit()
         except Exception as e:
             st.error(f"FTP Connection Failed: {e}")
@@ -120,14 +267,16 @@ def run_loot_analyzer():
             for item in root.findall('type'):
                 name = item.get('name', 'Unknown')
                 
-                # Filter: Weapons and Mags
-                is_weapon = any(x in name for x in ["Weapon", "Rifle", "Pistol", "Shotgun", "Gun"])
-                is_mag = "Mag_" in name
+                # Filter: Only process items in our Translation List OR known patterns
+                # This ensures we mostly get the Guns and Mags we care about
+                is_weapon = any(x in name for x in ["Weapon", "Rifle", "Pistol", "Shotgun", "Gun", "Mag_"])
+                in_dict = name in ITEM_TRANSLATIONS
                 
-                if is_weapon or is_mag:
+                if is_weapon or in_dict:
                     nominal = int(item.find('nominal').text) if item.find('nominal') is not None else 0
                     min_val = int(item.find('min').text) if item.find('min') is not None else 0
-                    category = "Magazine" if is_mag else "Weapon"
+                    
+                    category = "Magazine" if "Mag_" in name else categorize_item(name)
                     
                     # Rarity Logic
                     if nominal <= 3: rarity = "💎 Ultra Rare"
@@ -136,51 +285,54 @@ def run_loot_analyzer():
                     else: rarity = "🟢 Common"
                     
                     data.append({
-                        "Code Name": name,
-                        "Display Name": format_item_name(name), # New Clean Name
-                        "Type": category,
+                        "Item Name": get_friendly_name(name),
+                        "Category": category,
                         "Nominal": nominal,
                         "Min": min_val,
-                        "Rarity": rarity
+                        "Rarity": rarity,
+                        "_code": name # Hidden column for sorting/debugging
                     })
 
-            # Create Table
             df = pd.DataFrame(data)
 
             # --- Controls ---
             st.success(f"✅ Loaded {len(df)} items from `{loaded_path}`")
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                search = st.text_input("🔍 Search Item", placeholder="Type item name (e.g. AKM)")
-            with col2:
-                sort_option = st.selectbox("Sort By", ["Display Name", "Nominal", "Rarity"])
-
-            # Filter & Sort
-            if search:
-                # Search both code name and clean name
-                df = df[df['Display Name'].str.contains(search, case=False) | df['Code Name'].str.contains(search, case=False)]
             
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                search = st.text_input("🔍 Search Item", placeholder="e.g. AKM")
+            with col2:
+                cat_filter = st.multiselect("Filter Category", ["Rifle/Weapon", "Pistol", "Magazine"], default=["Rifle/Weapon", "Pistol", "Magazine"])
+            with col3:
+                sort_option = st.selectbox("Sort By", ["Item Name", "Nominal", "Rarity"])
+
+            # Apply Filters
+            if search:
+                df = df[df['Item Name'].str.contains(search, case=False)]
+            
+            df = df[df['Category'].isin(cat_filter)]
+            
+            # Apply Sort
             if sort_option == "Nominal":
                 df = df.sort_values(by="Nominal", ascending=True)
             elif sort_option == "Rarity":
                 df = df.sort_values(by="Nominal", ascending=True) 
             else:
-                df = df.sort_values(by="Display Name")
+                df = df.sort_values(by="Item Name")
 
-            # Display
-            # HEIGHT INCREASED TO 900px to fit screen
+            # Display Table (HEIGHT INCREASED to 1200)
             st.dataframe(
                 df, 
-                height=900, 
+                height=1200, 
                 use_container_width=True, 
                 hide_index=True,
                 column_config={
-                    "Code Name": st.column_config.TextColumn("Code Name", help="The raw ID used in XML", width="medium"),
-                    "Display Name": st.column_config.TextColumn("Item Name", width="large"),
-                    "Type": st.column_config.TextColumn("Category", width="small"),
+                    "Item Name": st.column_config.TextColumn("In-Game Name", width="large"),
+                    "Category": st.column_config.TextColumn("Category", width="small"),
                     "Nominal": st.column_config.NumberColumn("Max", width="small"),
                     "Min": st.column_config.NumberColumn("Min", width="small"),
                     "Rarity": st.column_config.TextColumn("Rarity Tier", width="medium"),
+                    "_code": None # Hide this column
                 }
             )
 
