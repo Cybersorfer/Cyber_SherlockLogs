@@ -133,6 +133,288 @@ UMP45,USG-45,Rifle/Weapon,15
 VSS,VSS,Rifle/Weapon,21
 Vikhr,Vikhr,Rifle/Weapon,18
 Winchester70,M70 Tundra,Rifle/Weapon,27
+AliceBag_Black,Field Backpack (Black),Backpack,25
+AliceBag_Camo,Field Backpack (Camo),Backpack,25
+AliceBag_Green,Field Backpack (Green),Backpack,25
+ArmyPouch_Beige,Army Pouch (Beige),Backpack,2
+ArmyPouch_Black,Army Pouch (Black),Backpack,2
+ArmyPouch_Camo,Army Pouch (Camo),Backpack,2
+ArmyPouch_Green,Army Pouch (Green),Backpack,2
+AssaultBag_Black,Assault Backpack (Black),Backpack,20
+AssaultBag_Green,Assault Backpack (Green),Backpack,20
+AssaultBag_Ttsko,Assault Backpack (TTSKO),Backpack,20
+AssaultBag_Winter,Assault Backpack (Winter),Backpack,20
+CanvasBag_Medical,Combat Backpack (Medical),Backpack,25
+CanvasBag_Olive,Combat Backpack (Olive),Backpack,25
+ChildBag_Blue,School Backpack (Blue),Backpack,12
+ChildBag_Green,School Backpack (Green),Backpack,12
+ChildBag_Red,School Backpack (Red),Backpack,12
+CourierBag,Courier Bag,Backpack,12
+CoyoteBag_Brown,Tactical Backpack (Tan),Backpack,25
+CoyoteBag_Green,Tactical Backpack (Green),Backpack,25
+CoyoteBag_Winter,Tactical Backpack (Grey),Backpack,25
+DryBag_Black,Dry Bag (Black),Backpack,20
+DryBag_Blue,Dry Bag (Blue),Backpack,20
+DryBag_Green,Dry Bag (Green),Backpack,20
+DryBag_Orange,Dry Bag (Orange),Backpack,20
+DryBag_Red,Dry Bag (Red),Backpack,20
+DryBag_Yellow,Dry Bag (Yellow),Backpack,20
+DrysackBag_Green,Dry Sack (Green),Backpack,9
+DrysackBag_Orange,Dry Sack (Orange),Backpack,9
+DrysackBag_Yellow,Dry Sack (Yellow),Backpack,9
+DuffelBagSmall_Camo,Duffel Bag (Camo),Backpack,20
+DuffelBagSmall_Green,Duffel Bag (Green),Backpack,20
+DuffelBagSmall_Medical,Duffel Bag (Medical),Backpack,20
+FurCourierBag,Fur Courier Bag,Backpack,12
+FurImprovisedBag,Improvised Fur Backpack,Backpack,20
+HipPack_Black,Fanny Pack (Black),Backpack,6
+HipPack_Green,Fanny Pack (Green),Backpack,6
+HipPack_Medical,Fanny Pack (Medical),Backpack,6
+HipPack_Party,Fanny Pack (Pattern),Backpack,6
+HuntingBag,Hunting Backpack,Backpack,25
+HuntingBag_Hannah,Hannah's Backpack,Backpack,25
+ImprovisedBag,Improvised Backpack,Backpack,20
+LeatherSack_Beige,Leather Sack (Beige),Backpack,20
+LeatherSack_Black,Leather Sack (Black),Backpack,20
+LeatherSack_Brown,Leather Sack (Brown),Backpack,20
+LeatherSack_Natural,Leather Sack (Natural),Backpack,20
+MountainBag_Blue,Mountain Backpack (Blue),Backpack,35
+MountainBag_Green,Mountain Backpack (Green),Backpack,35
+MountainBag_Orange,Mountain Backpack (Orange),Backpack,35
+MountainBag_Red,Mountain Backpack (Red),Backpack,35
+Slingbag_Black,Sling Bag (Black),Backpack,12
+Slingbag_Brown,Sling Bag (Brown),Backpack,12
+Slingbag_Gray,Sling Bag (Grey),Backpack,12
+SmershBag,Smersh Buttpack,Backpack,12
+TaloonBag_Blue,Taloon Backpack (Blue),Backpack,20
+TaloonBag_Green,Taloon Backpack (Green),Backpack,20
+TaloonBag_Orange,Taloon Backpack (Orange),Backpack,20
+TaloonBag_Violet,Taloon Backpack (Violet),Backpack,20
+TortillaBag,Combat Backpack (Camouflage),Backpack,25
+TortillaBag_Winter,Combat Backpack (Winter),Backpack,25
+WaterproofBag_Green,Dry Bag (Green),Backpack,20
+WaterproofBag_Orange,Dry Bag (Orange),Backpack,20
+WaterproofBag_Yellow,Dry Bag (Yellow),Backpack,20
+AthleticShoes_Black,Athletic Shoes (Black),Clothing,4
+AthleticShoes_Blue,Athletic Shoes (Blue),Clothing,4
+AthleticShoes_Brown,Athletic Shoes (Brown),Clothing,4
+AthleticShoes_Green,Athletic Shoes (Green),Clothing,4
+AthleticShoes_Grey,Athletic Shoes (Grey),Clothing,4
+CombatBoots_Beige,Combat Boots (Beige),Clothing,4
+CombatBoots_Black,Combat Boots (Black),Clothing,4
+CombatBoots_Brown,Combat Boots (Brown),Clothing,4
+CombatBoots_Green,Combat Boots (Green),Clothing,4
+CombatBoots_Grey,Combat Boots (Grey),Clothing,4
+DressShoes_Beige,Dress Shoes (Beige),Clothing,4
+DressShoes_Black,Dress Shoes (Black),Clothing,4
+DressShoes_Brown,Dress Shoes (Brown),Clothing,4
+DressShoes_Sunburst,Dress Shoes (Sunburst),Clothing,4
+DressShoes_White,Dress Shoes (White),Clothing,4
+HikingBootsLow_Beige,Hiking Shoes (Beige),Clothing,4
+HikingBootsLow_Black,Hiking Shoes (Black),Clothing,4
+HikingBootsLow_Blue,Hiking Shoes (Blue),Clothing,4
+HikingBootsLow_Grey,Hiking Shoes (Grey),Clothing,4
+HikingBoots_Black,Hiking Boots (Black),Clothing,4
+HikingBoots_Brown,Hiking Boots (Brown),Clothing,4
+JoggingShoes_Black,Jogging Shoes (Black),Clothing,4
+JoggingShoes_Blue,Jogging Shoes (Blue),Clothing,4
+JoggingShoes_Red,Jogging Shoes (Red),Clothing,4
+JoggingShoes_Violet,Jogging Shoes (Violet),Clothing,4
+JoggingShoes_White,Jogging Shoes (White),Clothing,4
+JungleBoots_Beige,Jungle Boots (Beige),Clothing,4
+JungleBoots_Black,Jungle Boots (Black),Clothing,4
+JungleBoots_Brown,Jungle Boots (Brown),Clothing,4
+JungleBoots_Green,Jungle Boots (Green),Clothing,4
+JungleBoots_Olive,Jungle Boots (Olive),Clothing,4
+LeatherShoes_Beige,Leather Shoes (Beige),Clothing,4
+LeatherShoes_Black,Leather Shoes (Black),Clothing,4
+LeatherShoes_Brown,Leather Shoes (Brown),Clothing,4
+LeatherShoes_Natural,Leather Shoes (Natural),Clothing,4
+MedievalBoots,Medieval Boots,Clothing,4
+MilitaryBoots_Beige,Military Boots (Beige),Clothing,4
+MilitaryBoots_Black,Military Boots (Black),Clothing,4
+MilitaryBoots_Bluerock,Military Boots (Blue),Clothing,4
+MilitaryBoots_Brown,Military Boots (Brown),Clothing,4
+MilitaryBoots_Redpunk,Military Boots (Red),Clothing,4
+Sneakers_Black,Sneakers (Black),Clothing,4
+Sneakers_Gray,Sneakers (Grey),Clothing,4
+Sneakers_Green,Sneakers (Green),Clothing,4
+Sneakers_Red,Sneakers (Red),Clothing,4
+Sneakers_White,Sneakers (White),Clothing,4
+TTSKOBoots,TTSKO Boots,Clothing,4
+Wellies_Black,Wellies (Black),Clothing,4
+Wellies_Brown,Wellies (Brown),Clothing,4
+Wellies_Green,Wellies (Green),Clothing,4
+Wellies_Grey,Wellies (Grey),Clothing,4
+WorkingBoots_Beige,Working Boots (Beige),Clothing,4
+WorkingBoots_Brown,Working Boots (Brown),Clothing,4
+WorkingBoots_Green,Working Boots (Green),Clothing,4
+WorkingBoots_Grey,Working Boots (Grey),Clothing,4
+WorkingBoots_Yellow,Working Boots (Yellow),Clothing,4
+AK_Bayonet,KA Bayonet,Melee,2
+BarbedBaseballBat,Barbed Baseball Bat,Melee,4
+BaseballBat,Baseball Bat,Melee,4
+BoneKnife,Bone Knife,Melee,1
+BrassKnuckles_Dull,Brass Knuckles (Dull),Melee,1
+BrassKnuckles_Shiny,Brass Knuckles (Shiny),Melee,1
+Broom,Broom,Melee,5
+Broom_Birch,Birch Broom,Melee,5
+CanOpener,Can Opener,Tool,1
+Cleaver,Cleaver,Melee,2
+CombatKnife,Combat Knife,Melee,2
+CrudeMachete,Crude Machete,Melee,3
+FangeKnife,Fang Knife,Melee,2
+HuntingKnife,Hunting Knife,Melee,2
+KitchenKnife,Kitchen Knife,Melee,2
+KukriKnife,Kukri,Melee,3
+LongWoodenStick,Long Stick,Melee,8
+M9A1_Bayonet,M9A1 Bayonet,Melee,2
+Machete,Machete,Melee,3
+NailedBaseballBat,Nailed Baseball Bat,Melee,4
+OrientalMachete,Oriental Machete,Melee,3
+Pipe,Pipe,Melee,3
+Pitchfork,Pitchfork,Melee,6
+SKS_Bayonet,SK 59/66 Bayonet,Melee,2
+Sickle,Sickle,Melee,2
+SpearBone,Bone Spear,Melee,8
+SpearStone,Stone Spear,Melee,8
+SteakKnife,Steak Knife,Melee,1
+StoneKnife,Stone Knife,Melee,1
+Sword,Sword,Melee,4
+LeatherBelt_Beige,Leather Belt (Beige),Clothing,1
+LeatherBelt_Black,Leather Belt (Black),Clothing,1
+LeatherBelt_Brown,Leather Belt (Brown),Clothing,1
+LeatherBelt_Natural,Leather Belt (Natural),Clothing,1
+LeatherGloves_Beige,Leather Gloves (Beige),Clothing,2
+LeatherGloves_Black,Leather Gloves (Black),Clothing,2
+LeatherGloves_Brown,Leather Gloves (Brown),Clothing,2
+LeatherGloves_Natural,Leather Gloves (Natural),Clothing,2
+LeatherHat_Beige,Leather Hat (Beige),Clothing,2
+LeatherHat_Black,Leather Hat (Black),Clothing,2
+LeatherHat_Brown,Leather Hat (Brown),Clothing,2
+LeatherHat_Natural,Leather Hat (Natural),Clothing,2
+LeatherJacket_Beige,Leather Jacket (Beige),Clothing,4
+LeatherJacket_Black,Leather Jacket (Black),Clothing,4
+LeatherJacket_Brown,Leather Jacket (Brown),Clothing,4
+LeatherJacket_Natural,Leather Jacket (Natural),Clothing,4
+LeatherPants_Beige,Leather Pants (Beige),Clothing,4
+LeatherPants_Black,Leather Pants (Black),Clothing,4
+LeatherPants_Brown,Leather Pants (Brown),Clothing,4
+LeatherPants_Natural,Leather Pants (Natural),Clothing,4
+LeatherStorageVest_Beige,Leather Storage Vest (Beige),Clothing,6
+LeatherStorageVest_Black,Leather Storage Vest (Black),Clothing,6
+LeatherStorageVest_Brown,Leather Storage Vest (Brown),Clothing,6
+LeatherStorageVest_Natural,Leather Storage Vest (Natural),Clothing,6
+GhillieSuit_Tan,Ghillie Suit (Tan),Clothing,12
+GhillieSuit_Woodland,Ghillie Suit (Woodland),Clothing,12
+GhillieTop_Tan,Ghillie Top (Tan),Clothing,8
+GhillieTop_Woodland,Ghillie Top (Woodland),Clothing,8
+GhillieBushrag_Tan,Ghillie Bushrag (Tan),Clothing,6
+GhillieBushrag_Woodland,Ghillie Bushrag (Woodland),Clothing,6
+GhillieHood_Tan,Ghillie Hood (Tan),Clothing,2
+GhillieHood_Woodland,Ghillie Hood (Woodland),Clothing,2
+Headdress_Wolf,Wolf Headdress,Clothing,4
+Ammo_CupidsBolt,Cupid's Bolt,Ammo,1
+Ammo_ImprovisedBolt_1,Improvised Bolt,Ammo,1
+Ammo_ImprovisedBolt_2,Improvised Bolt,Ammo,1
+ImprovisedExplosive,Improvised Explosive,Weapon,4
+ImprovisedSuppressor,Improvised Suppressor,Attachment,2
+BoneBait,Bone Bait,Tool,1
+BoneHook,Bone Hook,Tool,1
+FishNetTrap,Fish Net Trap,Tool,4
+ImprovisedFishingRod,Improvised Fishing Rod,Tool,5
+SmallFishTrap,Small Fish Trap,Tool,4
+WoodenHook,Wooden Hook,Tool,1
+AntiPestsSpray,Disinfectant Spray,Tool,2
+ChickenFeather,Chicken Feather,Material,1
+HandDrillKit,Hand Drill Kit,Tool,2
+HandcuffsLocked,Handcuffs (Locked),Tool,2
+LongTorch,Long Torch,Tool,6
+MouthRag,Gag (Rag),Clothing,1
+Paper,Paper,Material,1
+Rag,Rag,Material,1
+SharpWoodenStick,Sharpened Stick,Tool,3
+Torch,Torch,Tool,3
+WoodenStick,Short Stick,Material,2
+AgaricusMushroom,Agaricus Mushroom,Food/Drink,1
+AuriculariaMushroom,Auricularia Mushroom,Food/Drink,1
+BoletusMushroom,Boletus Mushroom,Food/Drink,1
+CraterellusMushroom,Craterellus Mushroom,Food/Drink,1
+LactariusMushroom,Lactarius Mushroom,Food/Drink,1
+MacrolepiotaMushroom,Parasol Mushroom,Food/Drink,2
+PleurotusMushroom,Pleurotus Mushroom,Food/Drink,1
+Bitterlings,Bitterlings,Food/Drink,1
+Carp,Carp,Food/Drink,2
+CarpFilletMeat,Carp Fillet,Food/Drink,1
+Mackerel,Mackerel,Food/Drink,2
+MackerelFilletMeat,Mackerel Fillet,Food/Drink,1
+Sardines,Sardines (Fresh),Food/Drink,1
+SardinesCan_Opened,Canned Sardines (Opened),Food/Drink,1
+SteelheadTrout,Steelhead Trout,Food/Drink,2
+SteelheadTroutFilletMeat,Steelhead Trout Fillet,Food/Drink,1
+WalleyePollock,Walleye Pollock,Food/Drink,2
+WalleyePollockFilletMeat,Walleye Pollock Fillet,Food/Drink,1
+BearSteakMeat,Bear Steak,Food/Drink,2
+BoarSteakMeat,Boar Steak,Food/Drink,2
+ChickenBreastMeat,Chicken Breast,Food/Drink,2
+CowSteakMeat,Cow Steak,Food/Drink,2
+DeadChicken_Brown,Dead Chicken (Brown),Food/Drink,4
+DeadChicken_Spotted,Dead Chicken (Spotted),Food/Drink,4
+DeadChicken_White,Dead Chicken (White),Food/Drink,4
+DeadFox,Dead Fox,Food/Drink,6
+DeadRabbit,Dead Rabbit,Food/Drink,4
+DeadRooster,Dead Rooster,Food/Drink,4
+DeerSteakMeat,Venison Steak,Food/Drink,2
+FoxSteakMeat,Fox Steak,Food/Drink,2
+GoatSteakMeat,Goat Steak,Food/Drink,2
+HumanSteakMeat,Human Steak,Food/Drink,2
+Lard,Lard,Food/Drink,2
+PigSteakMeat,Pork Steak,Food/Drink,2
+RabbitLegMeat,Rabbit Leg,Food/Drink,1
+RedCaviar,Red Caviar,Food/Drink,1
+ReindeerSteakMeat,Reindeer Steak,Food/Drink,2
+SheepSteakMeat,Mutton Steak,Food/Drink,2
+WolfSteakMeat,Wolf Steak,Food/Drink,2
+Apple,Apple,Food/Drink,1
+CaninaBerry,Rosehip Berries,Food/Drink,1
+Pear,Pear,Food/Drink,1
+PlantMaterial,Plant Material,Material,2
+Plant_Pepper,Pepper (Veg),Food/Drink,1
+Plant_Potato,Potato Plant,Farming,1
+Plant_Pumpkin,Pumpkin Plant,Farming,1
+Plant_Tomato,Tomato Plant,Farming,1
+Plant_Zucchini,Zucchini Plant,Farming,1
+Plum,Plum,Food/Drink,1
+Potato,Potato,Food/Drink,1
+Pumpkin,Pumpkin,Food/Drink,4
+SambucusBerry,Elderberries,Food/Drink,1
+SlicedPumpkin,Pumpkin Slice,Food/Drink,1
+BakedBeansCan_Opened,Baked Beans (Opened),Food/Drink,1
+BrisketSpread_Opened,Brisket Spread (Opened),Food/Drink,1
+CatFoodCan_Opened,Cat Food (Opened),Food/Drink,1
+CrabCan_Opened,Canned Crab (Opened),Food/Drink,1
+DogFoodCan_Opened,Dog Food (Opened),Food/Drink,1
+Lunchmeat_Opened,Lunchmeat (Opened),Food/Drink,1
+Pajka_Opened,Pajka (Opened),Food/Drink,1
+Pate_Opened,Pate (Opened),Food/Drink,1
+PeachesCan_Opened,Canned Peaches (Opened),Food/Drink,1
+PorkCan_Opened,Canned Pork (Opened),Food/Drink,1
+SpaghettiCan_Opened,Spaghetti (Opened),Food/Drink,1
+TacticalBaconCan_Opened,Tactical Bacon (Opened),Food/Drink,1
+TunaCan_Opened,Canned Tuna (Opened),Food/Drink,1
+UnknownFoodCan_Opened,Unknown Food Can (Opened),Food/Drink,1
+BloodBagFull,Blood Bag (Full),Medical,2
+BloodBagIV,Blood Bag IV,Medical,2
+SalineBagIV,Saline Bag IV,Medical,2
+SmallGuts,Small Guts,Material,2
+Guts,Guts,Material,2
+GiftWrapPaper,Gift Wrap,Material,1
+CookingStand,Cooking Tripod,Tool,6
+Fireplace,Fireplace,Tool,6
+FireplaceFireBarrel,Fire Barrel,Container,10
+FireplaceIndoor,Indoor Fireplace,Tool,1
+Firewood,Firewood,Material,4
+OvenIndoor,Indoor Oven,Tool,1
 ExpansionMaskHoxton,Hoxton Mask (Payday),Clothing,2
 ExpansionMaskWolf,Wolf Mask (Payday),Clothing,2
 ExpansionMaskChains,Chains Mask (Payday),Clothing,2
@@ -153,7 +435,7 @@ FireExtinguisher,Fire Extinguisher,Tool,6
 InsecticideSpray,Disinfectant Spray (Insecticide),Tool,2
 SprayCan_Black,Spraypaint (Black),Tool,2
 SprayCan_Green,Spraypaint (Green),Tool,2
-Paddle,Paddle,Weapon (Melee),3
-HayHook,Hay Hook,Weapon (Melee),2
+Paddle,Paddle,Melee,3
+HayHook,Hay Hook,Melee,2
 PunchCard,Punch Card (Bunker Key),Key,1
 LeatherBottle,Leather Water Bottle,Food/Drink,2
