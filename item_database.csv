@@ -79,9 +79,9 @@ Aug,Aur A1,Rifle/Weapon,24
 AugShort,Aur AX,Rifle/Weapon,21
 B95,Blaze,Rifle/Weapon,27
 CZ527,CR-527,Rifle/Weapon,24
-CZ527_Black,CR-527 (Black),Rifle/Weapon,24
-CZ527_Camo,CR-527 (Camo),Rifle/Weapon,24
-CZ527_Green,CR-527 (Green),Rifle/Weapon,24
+CZ527_Black,CR-527 Rifle (Black),Rifle/Weapon,24
+CZ527_Camo,CR-527 Rifle (Camo),Rifle/Weapon,24
+CZ527_Green,CR-527 Rifle (Green),Rifle/Weapon,24
 CZ550,CZ 550,Rifle/Weapon,27
 CZ61,Skorpion,Rifle/Weapon,12
 Crossbow_Autumn,Crossbow (Autumn),Rifle/Weapon,24
@@ -133,3 +133,27 @@ UMP45,USG-45,Rifle/Weapon,15
 VSS,VSS,Rifle/Weapon,21
 Vikhr,Vikhr,Rifle/Weapon,18
 Winchester70,M70 Tundra,Rifle/Weapon,27
+ExpansionMaskHoxton,Hoxton Mask (Payday),Clothing,2
+ExpansionMaskWolf,Wolf Mask (Payday),Clothing,2
+ExpansionMaskChains,Chains Mask (Payday),Clothing,2
+FlightHelmet_Green,Flight Helmet (Green),Clothing,4
+FlightHelmet_Black,Flight Helmet (Black),Clothing,4
+Cigarettes_Chernamorka,Chernamorka Cigarettes,Food/Drink,1
+Cigarettes_Merkur,Merkur Cigarettes,Food/Drink,1
+Cigarettes_Partyzanka,Partyzanka Cigarettes,Food/Drink,1
+Banana,Banana (Food),Food/Drink,1
+Orange,Orange (Food),Food/Drink,1
+Kiwi,Kiwi (Food),Food/Drink,1
+CannabisSeedsPack,Cannabis Seeds,Farming,1
+Vodka,Vodka,Food/Drink,2
+Refridgerator,Refrigerator (Container),Container,99
+RefrigeratorMinsk,Refrigerator Minsk (Container),Container,99
+Syringe,Syringe,Medical,1
+FireExtinguisher,Fire Extinguisher,Tool,6
+InsecticideSpray,Disinfectant Spray (Insecticide),Tool,2
+SprayCan_Black,Spraypaint (Black),Tool,2
+SprayCan_Green,Spraypaint (Green),Tool,2
+Paddle,Paddle,Weapon (Melee),3
+HayHook,Hay Hook,Weapon (Melee),2
+PunchCard,Punch Card (Bunker Key),Key,1
+LeatherBottle,Leather Water Bottle,Food/Drink,2
