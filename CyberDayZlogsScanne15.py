@@ -27,7 +27,7 @@ FTP_HOST = "usla643.gamedata.io"
 FTP_USER = "ni11109181_1"
 FTP_PASS = "343mhfxd"
 
-# --- TRANSLATION DICTIONARY (FROM YOUR DATA) ---
+# --- TRANSLATION DICTIONARY ---
 ITEM_TRANSLATIONS = {
     # Magazines
     "Mag_1911_7Rnd": "7rd 1911 Mag",
@@ -231,7 +231,6 @@ def run_loot_analyzer():
 
     # 1. Connect via FTP
     xml_content = None
-    loaded_path = ""
     
     possible_paths = [
         "/dayzps_missions/dayzOffline.chernarusplus/db/types.xml", 
@@ -250,7 +249,6 @@ def run_loot_analyzer():
                     buf = io.BytesIO()
                     ftp.retrbinary(f"RETR {path}", buf.write)
                     xml_content = buf.getvalue().decode("utf-8", errors="ignore")
-                    loaded_path = path
                     break 
                 except Exception: continue
             ftp.quit()
@@ -268,7 +266,6 @@ def run_loot_analyzer():
                 name = item.get('name', 'Unknown')
                 
                 # Filter: Only process items in our Translation List OR known patterns
-                # This ensures we mostly get the Guns and Mags we care about
                 is_weapon = any(x in name for x in ["Weapon", "Rifle", "Pistol", "Shotgun", "Gun", "Mag_"])
                 in_dict = name in ITEM_TRANSLATIONS
                 
@@ -287,6 +284,7 @@ def run_loot_analyzer():
                     data.append({
                         "Item Name": get_friendly_name(name),
                         "Category": category,
+                        "Slots": 0, # NEW: Initializing Slots column
                         "Nominal": nominal,
                         "Min": min_val,
                         "Rarity": rarity,
@@ -297,6 +295,7 @@ def run_loot_analyzer():
 
             # --- Controls ---
             st.success(f"✅ Loaded {len(df)} items")
+            st.info("ℹ️ INSTRUCTIONS: Enter slot sizes in the 'Slots' column. When finished, click 'Download Updated Data' at the bottom.")
             
             col1, col2, col3 = st.columns([2, 1, 1])
             with col1:
@@ -320,20 +319,34 @@ def run_loot_analyzer():
             else:
                 df = df.sort_values(by="Item Name")
 
-            # Display Table (HEIGHT INCREASED to 1200)
-            st.dataframe(
+            # --- DATA EDITOR (EDITABLE TABLE) ---
+            edited_df = st.data_editor(
                 df, 
                 height=1200, 
                 use_container_width=True, 
                 hide_index=True,
+                disabled=["Item Name", "Category", "Nominal", "Min", "Rarity", "_code"], # Lock everything except Slots
                 column_config={
                     "Item Name": st.column_config.TextColumn("In-Game Name", width="large"),
                     "Category": st.column_config.TextColumn("Category", width="small"),
+                    "Slots": st.column_config.NumberColumn("Slots (Edit)", help="Enter Inventory Size here", min_value=0, max_value=200, step=1),
                     "Nominal": st.column_config.NumberColumn("Max", width="small"),
                     "Min": st.column_config.NumberColumn("Min", width="small"),
                     "Rarity": st.column_config.TextColumn("Rarity Tier", width="medium"),
                     "_code": None # Hide this column
                 }
+            )
+
+            # --- DOWNLOAD BUTTON ---
+            st.divider()
+            csv = edited_df.to_csv(index=False).encode('utf-8')
+            
+            st.download_button(
+                label="💾 Download Updated Data (Send this file to Developer)",
+                data=csv,
+                file_name="dayz_loot_with_slots.csv",
+                mime="text/csv",
+                use_container_width=True
             )
 
         except Exception as e:
