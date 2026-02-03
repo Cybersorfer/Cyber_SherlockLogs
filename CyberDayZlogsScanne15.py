@@ -58,7 +58,7 @@ def check_password():
     return False
 
 # ==============================================================================
-# SECTION 2: LOOT ANALYZER (DB + FTP VERSION)
+# SECTION 2: LOOT ANALYZER (DIRECT SAVE VERSION)
 # ==============================================================================
 def load_item_database():
     """
@@ -72,7 +72,7 @@ def load_item_database():
             st.error(f"Error loading {db_file}: {e}")
             return {}
     else:
-        st.warning(f"⚠️ {db_file} not found! Showing raw code names only.")
+        st.warning(f"⚠️ {db_file} not found! Saving will create it.")
         return {}
 
 def run_loot_analyzer():
@@ -122,7 +122,7 @@ def run_loot_analyzer():
                 category = db_info.get("category", "Unknown")
                 slots = db_info.get("slots", 0)
 
-                # Filter Logic (Show if in DB OR if it looks like a weapon/mag)
+                # Filter Logic
                 is_relevant = (code_name in item_db) or \
                               any(x in code_name for x in ["Weapon", "Rifle", "Pistol", "Mag_"])
                 
@@ -153,8 +153,7 @@ def run_loot_analyzer():
             df = pd.DataFrame(data)
 
             # --- Controls ---
-            st.success(f"✅ Loaded {len(df)} items. Merged live server data with 'item_database.csv'.")
-            st.info("ℹ️ To update permanent info (Name/Slots), edit 'item_database.csv' and re-upload it.")
+            st.success(f"✅ Loaded {len(df)} items.")
             
             col1, col2, col3 = st.columns([2, 1, 1])
             with col1:
@@ -177,13 +176,24 @@ def run_loot_analyzer():
             else:
                 df = df.sort_values(by="Item Name")
 
+            st.divider()
+            
+            # --- EDIT MODE TOGGLE ---
+            edit_mode = st.toggle("🔓 Unlock Slots for Editing", value=False)
+            
+            if edit_mode:
+                st.info("✏️ Edit Mode Active. Change the 'Slots' numbers below and click 'Save Changes' to update the database.")
+                disabled_cols = ["Item Name", "Category", "Nominal", "Min", "Rarity", "_code"]
+            else:
+                disabled_cols = df.columns # Lock everything
+            
             # --- EDITOR ---
             edited_df = st.data_editor(
                 df, 
                 height=1200, 
                 use_container_width=True, 
                 hide_index=True,
-                disabled=["Item Name", "Category", "Nominal", "Min", "Rarity", "_code"],
+                disabled=disabled_cols,
                 column_config={
                     "Item Name": st.column_config.TextColumn("In-Game Name", width="large"),
                     "Category": st.column_config.TextColumn("Category", width="small"),
@@ -195,24 +205,21 @@ def run_loot_analyzer():
                 }
             )
 
-            # --- CSV EXPORT FOR UPDATING DB ---
-            st.divider()
-            st.caption("Admin Tools")
-            
-            # Prepare format for database update (code_name, friendly, category, slots)
-            if not edited_df.empty:
-                export_df = edited_df.copy()
-                export_df = export_df.rename(columns={"Item Name": "friendly_name", "Category": "category", "Slots": "slots", "_code": "code_name"})
-                export_df = export_df[["code_name", "friendly_name", "category", "slots"]] # Keep only DB columns
-                
-                csv = export_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="💾 Download Updated Database File",
-                    data=csv,
-                    file_name="item_database.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
+            # --- SAVE BUTTON (Only in Edit Mode) ---
+            if edit_mode:
+                if st.button("💾 Save Changes to Database", type="primary", use_container_width=True):
+                    try:
+                        # Prepare format for database update
+                        export_df = edited_df.copy()
+                        export_df = export_df.rename(columns={"Item Name": "friendly_name", "Category": "category", "Slots": "slots", "_code": "code_name"})
+                        export_df = export_df[["code_name", "friendly_name", "category", "slots"]] # Keep only DB columns
+                        
+                        # Write to local file
+                        export_df.to_csv("item_database.csv", index=False)
+                        st.success("✅ Database saved successfully! Reloading...")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error saving database: {e}")
 
         except Exception as e:
             st.error(f"Error parsing XML file: {e}")
