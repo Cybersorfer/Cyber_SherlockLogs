@@ -1,0 +1,135 @@
+code_name,friendly_name,category,slots
+Mag_1911_7Rnd,7rd 1911 Mag,Magazine,1
+Mag_AK101_30Rnd,30rd KA-101 Mag,Magazine,2
+Mag_AK101_30Rnd_Green,30rd KA-101 Mag (Green),Magazine,2
+Mag_AK74_30Rnd,30rd KA-74 Mag,Magazine,2
+Mag_AK74_45Rnd,45rd KA-74 Mag,Magazine,3
+Mag_AKM_30Rnd,30rd KA-M Mag,Magazine,2
+Mag_AKM_Drum75Rnd,75rd KA-M Drum Mag,Magazine,4
+Mag_AKM_Palm30Rnd,30rd KA-M Polymer Mag,Magazine,2
+Mag_Aug_30Rnd,30rd Aur Mag,Magazine,2
+Mag_CMAG_10Rnd,10rd C-Mag (M4),Magazine,1
+Mag_CMAG_20Rnd,20rd C-Mag (M4),Magazine,2
+Mag_CMAG_30Rnd,30rd C-Mag (M4),Magazine,2
+Mag_CMAG_40Rnd,40rd C-Mag (M4),Magazine,3
+Mag_CMAG_Green,30rd C-Mag (Green),Magazine,2
+Mag_CZ527_5rnd,5rd CR-527 Mag,Magazine,1
+Mag_CZ550_10Rnd,10rd Internal Mag (CZ550),Magazine,1
+Mag_CZ61_20Rnd,20rd Skorpion Mag,Magazine,1
+Mag_CZ75_15Rnd,15rd CR-75 Mag,Magazine,1
+Mag_Deagle_9rnd,9rd Deagle Mag,Magazine,1
+Mag_FAL_20Rnd,20rd LAR Mag,Magazine,2
+Mag_FAMAS_25Rnd,25rd LE-MAS Mag,Magazine,2
+Mag_FNX45_15Rnd,15rd FX-45 Mag,Magazine,1
+Mag_Glock_15Rnd,15rd Mlock-91 Mag,Magazine,1
+Mag_IJ70_8Rnd,8rd IJ-70 Mag,Magazine,1
+Mag_M14_10Rnd,10rd DMR Mag,Magazine,1
+Mag_M14_20Rnd,20rd DMR Mag,Magazine,2
+Mag_MKII_10Rnd,10rd MK II Mag,Magazine,1
+Mag_MP5_15Rnd,15rd SG5-K Mag,Magazine,1
+Mag_MP5_30Rnd,30rd SG5-K Mag,Magazine,2
+Mag_P1_8Rnd,8rd P1 Mag,Magazine,1
+Mag_PM73_15Rnd,15rd PM73 Rak Mag,Magazine,1
+Mag_PM73_25Rnd,25rd PM73 Rak Mag,Magazine,2
+Mag_PP19_64Rnd,64rd Bizon Mag,Magazine,2
+Mag_Ruger1022_15Rnd,15rd Sporter Mag,Magazine,1
+Mag_Ruger1022_30Rnd,30rd Sporter Mag,Magazine,2
+Mag_SSG82_5rnd,5rd SSG 82 Mag,Magazine,1
+Mag_STANAG_30Rnd,30rd Standard Mag,Magazine,2
+Mag_STANAG_30Rnd_Coupled,60rd Coupled Mag,Magazine,4
+Mag_STANAG_60Rnd,60rd Standard Mag (M4),Magazine,3
+Mag_SV98_10Rnd,10rd VS-98 Mag,Magazine,2
+Mag_SVD_10Rnd,10rd VSD Mag,Magazine,2
+Mag_Saiga_5Rnd,5rd Vaiga Mag,Magazine,2
+Mag_Saiga_8Rnd,8rd Vaiga Mag,Magazine,2
+Mag_Saiga_Drum20Rnd,20rd Vaiga Drum Mag,Magazine,4
+Mag_Scout_5Rnd,5rd Pioneer Mag,Magazine,1
+Mag_UMP_25Rnd,25rd USG-45 Mag,Magazine,2
+Mag_VAL_20Rnd,20rd SVAL Mag,Magazine,2
+Mag_VSS_10Rnd,10rd VSS Mag,Magazine,2
+Mag_Vikhr_30Rnd,30rd Vikhr Mag,Magazine,2
+CZ75,CR-75,Pistol,4
+Colt1911,Kolt 1911,Pistol,4
+Deagle,Deagle,Pistol,6
+Deagle_Gold,Deagle (Gold),Pistol,6
+Derringer_Black,Derringer (Black),Pistol,2
+Derringer_Grey,Derringer (Grey),Pistol,2
+Derringer_Pink,Derringer (Pink),Pistol,2
+Engraved1911,Kolt 1911 (Engraved),Pistol,4
+FNX45,FX-45,Pistol,4
+Flaregun,Flaregun,Pistol,4
+Glock19,Mlock-91,Pistol,4
+Longhorn,Longhorn,Pistol,6
+MKII,MK II,Pistol,4
+Magnum,Revolver,Pistol,4
+MakarovIJ70,IJ-70,Pistol,4
+P1,P1,Pistol,4
+AK101,KA-101,Rifle/Weapon,24
+AK101_Black,KA-101 (Black),Rifle/Weapon,24
+AK101_Green,KA-101 (Green),Rifle/Weapon,24
+AK74,KA-74,Rifle/Weapon,24
+AK74_Black,KA-74 (Black),Rifle/Weapon,24
+AK74_Green,KA-74 (Green),Rifle/Weapon,24
+AKM,KA-M,Rifle/Weapon,24
+AKS74U,KAS-74U,Rifle/Weapon,18
+AKS74U_Black,KAS-74U (Black),Rifle/Weapon,18
+AKS74U_Green,KAS-74U (Green),Rifle/Weapon,18
+ASVAL,SVAL,Rifle/Weapon,21
+Aug,Aur A1,Rifle/Weapon,24
+AugShort,Aur AX,Rifle/Weapon,21
+B95,Blaze,Rifle/Weapon,27
+CZ527,CR-527,Rifle/Weapon,24
+CZ527_Black,CR-527 (Black),Rifle/Weapon,24
+CZ527_Camo,CR-527 (Camo),Rifle/Weapon,24
+CZ527_Green,CR-527 (Green),Rifle/Weapon,24
+CZ550,CZ 550,Rifle/Weapon,27
+CZ61,Skorpion,Rifle/Weapon,12
+Crossbow_Autumn,Crossbow (Autumn),Rifle/Weapon,24
+Crossbow_Black,Crossbow (Black),Rifle/Weapon,24
+Crossbow_Summer,Crossbow (Summer),Rifle/Weapon,24
+Crossbow_Wood,Crossbow (Wood),Rifle/Weapon,24
+FAL,LAR,Rifle/Weapon,27
+FAMAS,LE-MAS,Rifle/Weapon,18
+Izh18,BK-18,Rifle/Weapon,24
+Izh18Shotgun,BK-133 (Single Shot),Rifle/Weapon,24
+Izh43Shotgun,BK-43,Rifle/Weapon,24
+M14,DMR,Rifle/Weapon,27
+M16A2,M16-A2,Rifle/Weapon,27
+M4A1,M4-A1,Rifle/Weapon,24
+M4A1_Black,M4-A1 (Black),Rifle/Weapon,24
+M4A1_Green,M4-A1 (Green),Rifle/Weapon,24
+M79,M79 Grenade Launcher,Rifle/Weapon,18
+MP5K,SG5-K,Rifle/Weapon,15
+Mosin9130,Mosin 91/30,Rifle/Weapon,30
+Mosin9130_Black,Mosin 91/30 (Black),Rifle/Weapon,30
+Mosin9130_Camo,Mosin 91/30 (Camo),Rifle/Weapon,30
+Mosin9130_Green,Mosin 91/30 (Green),Rifle/Weapon,30
+Mp133Shotgun,BK-133,Rifle/Weapon,24
+PM73Rak,PM-73 Rak,Rifle/Weapon,15
+PP19,Bizon,Rifle/Weapon,18
+R12,Sawed-off BK-43,Rifle/Weapon,10
+Repeater,Repeater Carbine,Rifle/Weapon,24
+Ruger1022,Sporter 22,Rifle/Weapon,24
+SKS,SK 59/66,Rifle/Weapon,27
+SSG82,SSG 82,Rifle/Weapon,27
+SV98,VS-98,Rifle/Weapon,27
+SVD,VSD,Rifle/Weapon,27
+SVD_Wooden,VSD (Wood),Rifle/Weapon,27
+Saiga,Vaiga,Rifle/Weapon,24
+SawedoffB95,Sawed-off Blaze,Rifle/Weapon,10
+SawedoffFAMAS,Sawed-off LE-MAS,Rifle/Weapon,10
+SawedoffIzh18,Sawed-off BK-18,Rifle/Weapon,10
+SawedoffIzh18Shotgun,Sawed-off Izh 18 Shotgun,Rifle/Weapon,10
+SawedoffIzh43Shotgun,Sawed-off BK-43,Rifle/Weapon,10
+SawedoffMagnum,Sawed-off Revolver,Pistol,4
+SawedoffMosin9130,Sawed-off Mosin,Rifle/Weapon,15
+SawedoffMosin9130_Black,Sawed-off Mosin (Black),Rifle/Weapon,15
+SawedoffMosin9130_Camo,Sawed-off Mosin (Camo),Rifle/Weapon,15
+SawedoffMosin9130_Green,Sawed-off Mosin (Green),Rifle/Weapon,15
+Scout,Pioneer,Rifle/Weapon,24
+Scout_Chernarus,Pioneer (Chernarus),Rifle/Weapon,24
+Scout_Livonia,Pioneer (Livonia),Rifle/Weapon,24
+UMP45,USG-45,Rifle/Weapon,15
+VSS,VSS,Rifle/Weapon,21
+Vikhr,Vikhr,Rifle/Weapon,18
+Winchester70,M70 Tundra,Rifle/Weapon,27
