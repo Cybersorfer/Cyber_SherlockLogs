@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, time
 import pytz 
 import streamlit.components.v1 as components
+import os
 
 # ==============================================================================
 # SECTION 1: TEAM ACCESS CONTROL
@@ -26,149 +27,6 @@ team_accounts = {
 FTP_HOST = "usla643.gamedata.io"
 FTP_USER = "ni11109181_1"
 FTP_PASS = "343mhfxd"
-
-# --- TRANSLATION DICTIONARY ---
-ITEM_TRANSLATIONS = {
-    # Magazines
-    "Mag_1911_7Rnd": "7rd 1911 Mag",
-    "Mag_AK101_30Rnd": "30rd KA-101 Mag",
-    "Mag_AK101_30Rnd_Green": "30rd KA-101 Mag (Green)",
-    "Mag_AK74_30Rnd": "30rd KA-74 Mag",
-    "Mag_AK74_45Rnd": "45rd KA-74 Mag",
-    "Mag_AKM_30Rnd": "30rd KA-M Mag",
-    "Mag_AKM_Drum75Rnd": "75rd KA-M Drum Mag",
-    "Mag_AKM_Palm30Rnd": "30rd KA-M Polymer Mag",
-    "Mag_Aug_30Rnd": "30rd Aur Mag",
-    "Mag_CMAG_10Rnd": "10rd C-Mag (M4)",
-    "Mag_CMAG_20Rnd": "20rd C-Mag (M4)",
-    "Mag_CMAG_30Rnd": "30rd C-Mag (M4)",
-    "Mag_CMAG_40Rnd": "40rd C-Mag (M4)",
-    "Mag_CMAG_Green": "30rd C-Mag (Green)",
-    "Mag_CZ527_5rnd": "5rd CR-527 Mag",
-    "Mag_CZ550_10Rnd": "10rd Internal Mag (CZ550)",
-    "Mag_CZ61_20Rnd": "20rd Skorpion Mag",
-    "Mag_CZ75_15Rnd": "15rd CR-75 Mag",
-    "Mag_Deagle_9rnd": "9rd Deagle Mag",
-    "Mag_FAL_20Rnd": "20rd LAR Mag",
-    "Mag_FAMAS_25Rnd": "25rd LE-MAS Mag",
-    "Mag_FNX45_15Rnd": "15rd FX-45 Mag",
-    "Mag_Glock_15Rnd": "15rd Mlock-91 Mag",
-    "Mag_IJ70_8Rnd": "8rd IJ-70 Mag",
-    "Mag_M14_10Rnd": "10rd DMR Mag",
-    "Mag_M14_20Rnd": "20rd DMR Mag",
-    "Mag_MKII_10Rnd": "10rd MK II Mag",
-    "Mag_MP5_15Rnd": "15rd SG5-K Mag",
-    "Mag_MP5_30Rnd": "30rd SG5-K Mag",
-    "Mag_P1_8Rnd": "8rd P1 Mag",
-    "Mag_PM73_15Rnd": "15rd PM73 Rak Mag",
-    "Mag_PM73_25Rnd": "25rd PM73 Rak Mag",
-    "Mag_PP19_64Rnd": "64rd Bizon Mag",
-    "Mag_Ruger1022_15Rnd": "15rd Sporter Mag",
-    "Mag_Ruger1022_30Rnd": "30rd Sporter Mag",
-    "Mag_SSG82_5rnd": "5rd SSG 82 Mag",
-    "Mag_STANAG_30Rnd": "30rd Standard Mag",
-    "Mag_STANAG_30Rnd_Coupled": "60rd Coupled Mag",
-    "Mag_STANAG_60Rnd": "60rd Standard Mag (M4)",
-    "Mag_SV98_10Rnd": "10rd VS-98 Mag",
-    "Mag_SVD_10Rnd": "10rd VSD Mag",
-    "Mag_Saiga_5Rnd": "5rd Vaiga Mag",
-    "Mag_Saiga_8Rnd": "8rd Vaiga Mag",
-    "Mag_Saiga_Drum20Rnd": "20rd Vaiga Drum Mag",
-    "Mag_Scout_5Rnd": "5rd Pioneer Mag",
-    "Mag_UMP_25Rnd": "25rd USG-45 Mag",
-    "Mag_VAL_20Rnd": "20rd SVAL Mag",
-    "Mag_VSS_10Rnd": "10rd VSS Mag",
-    "Mag_Vikhr_30Rnd": "30rd Vikhr Mag",
-    
-    # Pistols
-    "CZ75": "CR-75",
-    "Colt1911": "Kolt 1911",
-    "Deagle": "Deagle",
-    "Deagle_Gold": "Deagle (Gold)",
-    "Derringer_Black": "Derringer (Black)",
-    "Derringer_Grey": "Derringer (Grey)",
-    "Derringer_Pink": "Derringer (Pink)",
-    "Engraved1911": "Kolt 1911 (Engraved)",
-    "FNX45": "FX-45",
-    "Flaregun": "Flaregun",
-    "Glock19": "Mlock-91",
-    "Longhorn": "Longhorn",
-    "MKII": "MK II",
-    "Magnum": "Revolver",
-    "MakarovIJ70": "IJ-70",
-    "P1": "P1",
-
-    # Rifles & Weapons
-    "AK101": "KA-101",
-    "AK101_Black": "KA-101 (Black)",
-    "AK101_Green": "KA-101 (Green)",
-    "AK74": "KA-74",
-    "AK74_Black": "KA-74 (Black)",
-    "AK74_Green": "KA-74 (Green)",
-    "AKM": "KA-M",
-    "AKS74U": "KAS-74U",
-    "AKS74U_Black": "KAS-74U (Black)",
-    "AKS74U_Green": "KAS-74U (Green)",
-    "ASVAL": "SVAL",
-    "Aug": "Aur A1",
-    "AugShort": "Aur AX",
-    "B95": "Blaze",
-    "CZ527": "CR-527",
-    "CZ527_Black": "CR-527 (Black)",
-    "CZ527_Camo": "CR-527 (Camo)",
-    "CZ527_Green": "CR-527 (Green)",
-    "CZ550": "CZ 550",
-    "CZ61": "Skorpion",
-    "Crossbow_Autumn": "Crossbow (Autumn)",
-    "Crossbow_Black": "Crossbow (Black)",
-    "Crossbow_Summer": "Crossbow (Summer)",
-    "Crossbow_Wood": "Crossbow (Wood)",
-    "FAL": "LAR",
-    "FAMAS": "LE-MAS",
-    "Izh18": "BK-18",
-    "Izh18Shotgun": "BK-133 (Single Shot)",
-    "Izh43Shotgun": "BK-43",
-    "M14": "DMR",
-    "M16A2": "M16-A2",
-    "M4A1": "M4-A1",
-    "M4A1_Black": "M4-A1 (Black)",
-    "M4A1_Green": "M4-A1 (Green)",
-    "M79": "M79 Grenade Launcher",
-    "MP5K": "SG5-K",
-    "Mosin9130": "Mosin 91/30",
-    "Mosin9130_Black": "Mosin 91/30 (Black)",
-    "Mosin9130_Camo": "Mosin 91/30 (Camo)",
-    "Mosin9130_Green": "Mosin 91/30 (Green)",
-    "Mp133Shotgun": "BK-133",
-    "PM73Rak": "PM-73 Rak",
-    "PP19": "Bizon",
-    "R12": "Sawed-off BK-43",
-    "Repeater": "Repeater Carbine",
-    "Ruger1022": "Sporter 22",
-    "SKS": "SK 59/66",
-    "SSG82": "SSG 82",
-    "SV98": "VS-98",
-    "SVD": "VSD",
-    "SVD_Wooden": "VSD (Wood)",
-    "Saiga": "Vaiga",
-    "SawedoffB95": "Sawed-off Blaze",
-    "SawedoffFAMAS": "Sawed-off LE-MAS",
-    "SawedoffIzh18": "Sawed-off BK-18",
-    "SawedoffIzh18Shotgun": "Sawed-off Izh 18 Shotgun",
-    "SawedoffIzh43Shotgun": "Sawed-off BK-43",
-    "SawedoffMagnum": "Sawed-off Revolver",
-    "SawedoffMosin9130": "Sawed-off Mosin",
-    "SawedoffMosin9130_Black": "Sawed-off Mosin (Black)",
-    "SawedoffMosin9130_Camo": "Sawed-off Mosin (Camo)",
-    "SawedoffMosin9130_Green": "Sawed-off Mosin (Green)",
-    "Scout": "Pioneer",
-    "Scout_Chernarus": "Pioneer (Chernarus)",
-    "Scout_Livonia": "Pioneer (Livonia)",
-    "UMP45": "USG-45",
-    "VSS": "VSS",
-    "Vikhr": "Vikhr",
-    "Winchester70": "M70 Tundra"
-}
 
 def log_session(user, action):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -200,38 +58,31 @@ def check_password():
     return False
 
 # ==============================================================================
-# SECTION 2: LOOT ANALYZER (FTP VERSION)
+# SECTION 2: LOOT ANALYZER (DB + FTP VERSION)
 # ==============================================================================
-def get_friendly_name(code_name):
+def load_item_database():
     """
-    Returns the In-Game name if found in dictionary.
-    Otherwise, cleans up the code name.
+    Loads item details (Friendly Name, Slots, Category) from local CSV.
     """
-    if code_name in ITEM_TRANSLATIONS:
-        return ITEM_TRANSLATIONS[code_name]
-    
-    # Fallback: Replace underscores and capitalization
-    clean = code_name.replace("_", " ")
-    return clean
-
-def categorize_item(code_name):
-    """Assigns category based on the known list or string pattern"""
-    if "Mag_" in code_name: return "Magazine"
-    
-    # Check if it's in our pistols list (rough check using known pistol codes)
-    pistols_set = ["Colt1911", "CZ75", "Deagle", "FNX45", "Glock19", "Magnum", "MKII", "P1", "MakarovIJ70", "Longhorn", "Derringer"]
-    if any(p in code_name for p in pistols_set):
-        return "Pistol"
-    
-    # Default to Rifle/Weapon for others
-    return "Rifle/Weapon"
+    db_file = "item_database.csv"
+    if os.path.exists(db_file):
+        try:
+            return pd.read_csv(db_file).set_index("code_name").to_dict("index")
+        except Exception as e:
+            st.error(f"Error loading {db_file}: {e}")
+            return {}
+    else:
+        st.warning(f"⚠️ {db_file} not found! Showing raw code names only.")
+        return {}
 
 def run_loot_analyzer():
     st.header("🎯 Loot Economy & Rarity Tracker")
 
-    # 1. Connect via FTP
-    xml_content = None
+    # 1. Load Database
+    item_db = load_item_database()
     
+    # 2. Connect via FTP for Live Counts
+    xml_content = None
     possible_paths = [
         "/dayzps_missions/dayzOffline.chernarusplus/db/types.xml", 
         "/dayzps/mpmissions/dayzOffline.chernarusplus/db/types.xml",
@@ -256,25 +107,33 @@ def run_loot_analyzer():
             st.error(f"FTP Connection Failed: {e}")
             return
 
-    # 2. Parse Data
+    # 3. Parse XML and Merge with DB
     if xml_content:
         try:
             root = ET.fromstring(xml_content)
             data = []
             
             for item in root.findall('type'):
-                name = item.get('name', 'Unknown')
+                code_name = item.get('name', 'Unknown')
                 
-                # Filter: Only process items in our Translation List OR known patterns
-                is_weapon = any(x in name for x in ["Weapon", "Rifle", "Pistol", "Shotgun", "Gun", "Mag_"])
-                in_dict = name in ITEM_TRANSLATIONS
+                # Check DB for info, otherwise guess
+                db_info = item_db.get(code_name, {})
+                friendly_name = db_info.get("friendly_name", code_name.replace("_", " "))
+                category = db_info.get("category", "Unknown")
+                slots = db_info.get("slots", 0)
+
+                # Filter Logic (Show if in DB OR if it looks like a weapon/mag)
+                is_relevant = (code_name in item_db) or \
+                              any(x in code_name for x in ["Weapon", "Rifle", "Pistol", "Mag_"])
                 
-                if is_weapon or in_dict:
+                if is_relevant:
                     nominal = int(item.find('nominal').text) if item.find('nominal') is not None else 0
                     min_val = int(item.find('min').text) if item.find('min') is not None else 0
                     
-                    category = "Magazine" if "Mag_" in name else categorize_item(name)
-                    
+                    if category == "Unknown":
+                        if "Mag_" in code_name: category = "Magazine"
+                        else: category = "Rifle/Weapon"
+
                     # Rarity Logic
                     if nominal <= 3: rarity = "💎 Ultra Rare"
                     elif nominal <= 10: rarity = "🔴 Hard"
@@ -282,20 +141,20 @@ def run_loot_analyzer():
                     else: rarity = "🟢 Common"
                     
                     data.append({
-                        "Item Name": get_friendly_name(name),
+                        "Item Name": friendly_name,
                         "Category": category,
-                        "Slots": 0, # NEW: Initializing Slots column
+                        "Slots": slots,
                         "Nominal": nominal,
                         "Min": min_val,
                         "Rarity": rarity,
-                        "_code": name # Hidden column for sorting/debugging
+                        "_code": code_name # Hidden
                     })
 
             df = pd.DataFrame(data)
 
             # --- Controls ---
-            st.success(f"✅ Loaded {len(df)} items")
-            st.info("ℹ️ INSTRUCTIONS: Enter slot sizes in the 'Slots' column. When finished, click 'Download Updated Data' at the bottom.")
+            st.success(f"✅ Loaded {len(df)} items. Merged live server data with 'item_database.csv'.")
+            st.info("ℹ️ To update permanent info (Name/Slots), edit 'item_database.csv' and re-upload it.")
             
             col1, col2, col3 = st.columns([2, 1, 1])
             with col1:
@@ -305,13 +164,12 @@ def run_loot_analyzer():
             with col3:
                 sort_option = st.selectbox("Sort By", ["Item Name", "Nominal", "Rarity"])
 
-            # Apply Filters
+            # Filters
             if search:
                 df = df[df['Item Name'].str.contains(search, case=False)]
-            
             df = df[df['Category'].isin(cat_filter)]
             
-            # Apply Sort
+            # Sort
             if sort_option == "Nominal":
                 df = df.sort_values(by="Nominal", ascending=True)
             elif sort_option == "Rarity":
@@ -319,35 +177,42 @@ def run_loot_analyzer():
             else:
                 df = df.sort_values(by="Item Name")
 
-            # --- DATA EDITOR (EDITABLE TABLE) ---
+            # --- EDITOR ---
             edited_df = st.data_editor(
                 df, 
                 height=1200, 
                 use_container_width=True, 
                 hide_index=True,
-                disabled=["Item Name", "Category", "Nominal", "Min", "Rarity", "_code"], # Lock everything except Slots
+                disabled=["Item Name", "Category", "Nominal", "Min", "Rarity", "_code"],
                 column_config={
                     "Item Name": st.column_config.TextColumn("In-Game Name", width="large"),
                     "Category": st.column_config.TextColumn("Category", width="small"),
-                    "Slots": st.column_config.NumberColumn("Slots (Edit)", help="Enter Inventory Size here", min_value=0, max_value=200, step=1),
+                    "Slots": st.column_config.NumberColumn("Slots", min_value=0, max_value=200, step=1),
                     "Nominal": st.column_config.NumberColumn("Max", width="small"),
                     "Min": st.column_config.NumberColumn("Min", width="small"),
                     "Rarity": st.column_config.TextColumn("Rarity Tier", width="medium"),
-                    "_code": None # Hide this column
+                    "_code": None
                 }
             )
 
-            # --- DOWNLOAD BUTTON ---
+            # --- CSV EXPORT FOR UPDATING DB ---
             st.divider()
-            csv = edited_df.to_csv(index=False).encode('utf-8')
+            st.caption("Admin Tools")
             
-            st.download_button(
-                label="💾 Download Updated Data (Send this file to Developer)",
-                data=csv,
-                file_name="dayz_loot_with_slots.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+            # Prepare format for database update (code_name, friendly, category, slots)
+            if not edited_df.empty:
+                export_df = edited_df.copy()
+                export_df = export_df.rename(columns={"Item Name": "friendly_name", "Category": "category", "Slots": "slots", "_code": "code_name"})
+                export_df = export_df[["code_name", "friendly_name", "category", "slots"]] # Keep only DB columns
+                
+                csv = export_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="💾 Download Updated Database File",
+                    data=csv,
+                    file_name="item_database.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
 
         except Exception as e:
             st.error(f"Error parsing XML file: {e}")
