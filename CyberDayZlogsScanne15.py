@@ -58,7 +58,7 @@ def check_password():
     return False
 
 # ==============================================================================
-# SECTION 2: LOOT ANALYZER (DIRECT SAVE VERSION)
+# SECTION 2: LOOT ANALYZER (SECURE VERSION)
 # ==============================================================================
 def load_item_database():
     """
@@ -152,6 +152,19 @@ def run_loot_analyzer():
 
             df = pd.DataFrame(data)
 
+            # --- 🔒 SECURITY FILTER ---
+            current_user = st.session_state.get("current_user", "Unknown")
+            super_admins = ["cybersorfer", "dirtmcgirrt"]
+            restricted_categories = ["Rifle/Weapon", "Pistol", "Magazine"]
+            
+            # If user is NOT a super admin, filter the dataframe immediately
+            if current_user not in super_admins:
+                df = df[df['Category'].isin(restricted_categories)]
+                available_categories = restricted_categories
+            else:
+                # Admins see all categories present in the data
+                available_categories = sorted(df['Category'].unique().tolist())
+
             # --- Controls ---
             st.success(f"✅ Loaded {len(df)} items.")
             
@@ -159,7 +172,8 @@ def run_loot_analyzer():
             with col1:
                 search = st.text_input("🔍 Search Item", placeholder="e.g. ka-m")
             with col2:
-                cat_filter = st.multiselect("Filter Category", ["Rifle/Weapon", "Pistol", "Magazine"], default=["Rifle/Weapon", "Pistol", "Magazine"])
+                # Filter is dynamic based on user permission
+                cat_filter = st.multiselect("Filter Category", available_categories, default=available_categories)
             with col3:
                 sort_option = st.selectbox("Sort By", ["Item Name", "Nominal", "Rarity"])
 
